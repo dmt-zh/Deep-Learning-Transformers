@@ -286,7 +286,7 @@ _GroupByWindowDataset element_spec=(
 ---
 Пример группировки. Небольшой срез датасета, состоящего и 370 строк, длинной до 12 токенов. Параметры группировки: `batch_size = 100`, `length_bucket_width = 1`
 
-![image](![image](https://github.com/user-attachments/assets/678da17a-4674-495b-a3f7-2dea040310ab)
+![image](https://github.com/user-attachments/assets/678da17a-4674-495b-a3f7-2dea040310ab)
 
 Файл с исходным датасетом и  группировкой датасета `batch_size = 100` и листами `length_bucket_width = 1`, `length_bucket_width = 1_FP16` и `length_bucket_width = 2`
 
