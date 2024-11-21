@@ -11,8 +11,8 @@
 
 <br>
 
-- ## [Механизм тренировочного процесса]()
-  - ### [Инициализация]()
+- ## [Механизм тренировочного процесса](https://github.com/dmt-zh/Deep-Learning-Transformers/tree/main/training)
+  - ### [Инициализация](https://github.com/dmt-zh/Deep-Learning-Transformers/tree/main/training#инициализация)
   - ### [Тренировочный процесс]()
      - #### [Энкодер]()
      - #### [Декодер]()
