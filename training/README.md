@@ -67,13 +67,13 @@
 
 - ##### устанавливается значение `batch_size_multiple`;
   >>>
-  Если активирована функция `Mixed precision` или `Jit compile`, то `batch_size_multiple` будет равен {+ 8 +}, иначе 1.\
+  Если активирована функция `Mixed precision` или `Jit compile`, то `batch_size_multiple` будет равен **8**, иначе 1.\
   ├── [batch_size_multiple = (...)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/runner.py#L228) модуль `runner.py`
   >>>
 
 - ##### создается функция создания и преобразования датасета;
   >>>
-  Подробно механизм преобразования рассмотрен в разделе [Создание тренировочного датасета](https://git.nordicwise.com/infra/machine-translate-utils/-/wikis/Создание-тренировочного-датасета)\
+  Подробно механизм преобразования рассмотрен в разделе [Создание тренировочного датасета](https://github.com/dmt-zh/Deep-Learning-Transformers/tree/main/dataset)\
   ├── [dataset_fn = (...)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/runner.py#L241) модуль `runner.py`
   >>>
 
@@ -148,8 +148,7 @@ random_uniform(shape, -limit, limit) ==> random_uniform((700, 8), -0.0920, 0.092
   ├── [self.ffn = FeedForwardNetwork()](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/transformer.py#L120) модуль `layers/transformer.py`\
   ├── [TransformerLayerWrapper(self.ffn)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/transformer.py#L390) модуль `layers/transformer.py`
 
-  как выглядит изначально **[модель]()
-**, веса и их значения показаны на примере небольшой размерности сети:\
+  как выглядит изначально **[модель](https://github.com/dmt-zh/Deep-Learning-Transformers/blob/main/training/model.md)**, веса и их значения показаны на примере небольшой размерности сети:\
   vocab: 26\
   num_units: 4\
   num_layers: 1\
