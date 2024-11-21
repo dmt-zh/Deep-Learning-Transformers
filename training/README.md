@@ -31,7 +31,7 @@
 - ##### определяется и инициализируется оптимизатор модели;
   >>>
 
-   * из [автоконфига](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/models/transformer.py#L157) модели трансформер берется наименования оптимизатора, который по дефолту задан `LazyAdam`. Этот оптимизатор реализован в библиотеке дополнений [TensorFlow Addons](https://www.tensorflow.org/addons/api_docs/python/tfa/optimizers/LazyAdam), **{- развитие и поддержка которой остановлена -}**.
+   * из [автоконфига](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/models/transformer.py#L157) модели трансформер берется наименования оптимизатора, который по дефолту задан `LazyAdam`. Этот оптимизатор реализован в библиотеке дополнений [TensorFlow Addons](https://www.tensorflow.org/addons/api_docs/python/tfa/optimizers/LazyAdam), **(развитие и поддержка которой остановлена)**.
 
   <br>
 
