@@ -552,7 +552,7 @@ outputs = [tf.transpose](https://www.tensorflow.org/api_docs/python/tf/transpose
             - считается матрица `cross_entropy` - матрица `logsoftmax` умножается на отрицательную матрицу `logits` и произведение суммируется построчно  →  `cross_entropy = numpy.sum(logsoftmax * -labels, axis=-1)`\
 ![cross_entropy](https://github.com/user-attachments/assets/6f0a0d03-ad69-460e-aa9d-161c0af9b498)
 
-   * с помощью функции [tf.sequence_mask](https://www.tensorflow.org/api_docs/python/tf/sequence_mask) рассчитывается матрица весов `weight` по переменной `sequence_length` (в этой переменной находятся значения длин предложений в токенах сгруппированных в батч) и размерности матрицы `logits.shape[1]`  [3, {-4-}, 26]\
+   * с помощью функции [tf.sequence_mask](https://www.tensorflow.org/api_docs/python/tf/sequence_mask) рассчитывается матрица весов `weight` по переменной `sequence_length` (в этой переменной находятся значения длин предложений в токенах сгруппированных в батч) и размерности матрицы `logits.shape[1]`  [3, **4**, 26]\
 ![weight](https://github.com/user-attachments/assets/769b53a2-8936-4353-a767-abd52ffa8aad)
 
    * с помощью функции [tf.math.reduce_sum](https://www.tensorflow.org/api_docs/python/tf/math/reduce_sum) по произведению матриц `cross_entropy` и `weight` рассчитывается переменная `loss`  →  `loss = tf.reduce_sum(cross_entropy * weight) = 39.6399841`\
@@ -571,7 +571,45 @@ outputs = [tf.transpose](https://www.tensorflow.org/api_docs/python/tf/transpose
 
 <hr>
 
+- ##### МЕХАНИЗМ АЛАЙНМЕНТА:
 
+- при тренировке модели с алайнментом, значение в переменной `loss`, полученное на прошлом шаге корректируется с помощью функции [guided_alignment_cost](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/utils/losses.py#L126C5-L126C26). Внутри функции происходят следующие преобразования:
+
+   * в зависимости от установленного в конфигурационном файле параметра `Guided alignment type` определяется функция преобразования:\
+    ━ для значения `ce` - [tf.keras.losses.CategoricalCrossentropy(reduction=tf.keras.losses.Reduction.SUM)](https://www.tensorflow.org/api_docs/python/tf/keras/losses/CategoricalCrossentropy) - дефолтное значение\
+    ━ для значения `mse` - [tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.SUM)](https://www.tensorflow.org/api_docs/python/tf/keras/losses/MeanSquaredError)
+
+   * по батчу токенов `target` языка рассчитывается длина предложений в токенах:\
+![labels_len](https://github.com/user-attachments/assets/6127fe83-5fd7-4a2a-8208-106fa896706e)
+
+   * с помощью функции [tf.sequence_mask](https://www.tensorflow.org/api_docs/python/tf/sequence_mask) по полученным длинам и размерности матрицы `attention` tf.shape(attention)[1] строится тензор весов `sample_weight`; для нашего примера длина предложений в токенах будет [3 3 3] и размерность матрицы `attention` [3 3 3]\
+![sample_weight](https://github.com/user-attachments/assets/a0e27803-b0c6-47a5-9f46-1f4365e4f5c3)
+
+   * с помощью функции [tf.expand_dims(input, axis)](https://www.tensorflow.org/api_docs/python/tf/expand_dims) матрица `sample_weight` изменяется по размерности  → `sample_weight = tf.expand_dims(sample_weight, -1)`\
+![sample_weight_expand](https://github.com/user-attachments/assets/2dc6f717-c115-44a7-97fa-99f501f30675)
+
+   * с помощью функции [tf.reduce_sum](https://www.tensorflow.org/api_docs/python/tf/math/reduce_sums) по массиву длин предложений батча рассчитывается значение `normalizer` → `normalizer = tf.reduce_sum([3 3 3]) = 9`
+
+   * с помощью функции `tf.keras.losses.CategoricalCrossentropy(alignment, attention)` по матрице алайнмента ([механизм формирования матрицы](https://github.com/dmt-zh/Transformers-Full-Review/tree/main/dataset#механизм-формирования-матрицы-алайнмента)) матрице `attention` (в матрице `attention` в каждом векторном представлении токена предварительно удален последний элемент `attention[:, :-1]`, что бы размерности матриц совпадали, т.к. размерность исходной матрицы `attention` 3 x 4 x 3) и матрице `sample_weight` рассчитывается значение переменной `cost`
+![caterorical_cross_entropy](https://github.com/user-attachments/assets/14fc5da1-395f-46f4-b7dc-db1940f85627)
+
+   * переменная `cost` делится на переменную `normalizer` → `cost = cost / normalizer = 9.00836372 / 9 = 1.00092936`
+
+   * переменная `cost` умножается на значение переменной `weight` (параметр из конфигурационного файла `Guided alignment weight`) →  `cost = cost * weight = 1.00092936 * 1 = 1.00092936`
+
+   * значение из переменной `loss`, полученное в функции `cross_entropy_sequence_loss` корректируется значением переменной `cost` путем сложения `loss = loss + cost = 39.6399841 + 1.00092936 = 40.6409149`
+
+   **Упрощенная последовательность вызова**:\
+   ├── [def _accumulate_gradients(self, batch)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/training.py#L287) модуль `training.py`\
+   ├── [def compute_gradients(features, labels, optimizer) class Model(tf.keras.layers.Layer)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/models/model.py#L223) модуль `model.py`\
+   ├── [def compute_training_loss(features, labels) class Model(tf.keras.layers.Layer)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/models/model.py#L274) модуль `model.py`\
+   ├── [def compute_loss(outputs, labels) class SequenceToSequence(model.SequenceGenerator)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/models/sequence_to_sequence.py#L424) модуль `sequence_to_sequence.py`\
+   ├── [def guided_alignment_cost()](https://github.com/OpenNMT/OpenNMT-tf/blob/master/opennmt/utils/losses.py#L126) модуль `utils/losses.py`
+
+   * Таким образом, итеративно, в процессе обучения модели с алайнментом мы корректируем значение лосс функции (увеличивая ее значение) и таким образом будем "принуждать" оптимизатор минимизировать функцию потерь с учетом влияния алайнмента. На картинке ниже показаны распределения вероятностей матриц `attention`   токенов `target` языка к токенам `source` полностью обученных моделей без алайнмента и с алайнментом. По распределениям видно, что по вероятностям матрицы `attention` модели с алайнментом токены `[▁П, ровер, ьте]` можно корректно сопоставить с токеном `▁Check`, а по матрице `attention` без алайнмента нельзя.
+![alignment](https://github.com/user-attachments/assets/6352826b-c3e9-419a-be02-5eb03ff6839c)
+
+<hr>
 
 
 
