@@ -148,14 +148,48 @@
 
 <hr>
 
+   * #### step = 1
+
+   * по матрице `word_ids`, полученной на шаге `step = 0` извлекаются векторные представления токенов из матрицы `target` эмбеддингов натренированной модели и вместе с матрицей `encoder_outputs`, продублированной на количество `beam_size` подается на вход в декодер. Из декодера получаем матрицы `logits` и `attention`\
+![decoder_step1](https://github.com/user-attachments/assets/cd30427e-c8c8-4cbc-bd4b-8df5a0f3c34d)
+
+   * проходим вышеописанные операции в step = 0 и получаем после шага 1 матрицы `word_ids`, `cum_log_probs`, `finished`, и словарь `extra_vars`\
+![log_probs_step1](https://github.com/user-attachments/assets/71409a87-4366-490f-a228-5988e69815a8)\
+![total_probs_step1](https://github.com/user-attachments/assets/73f078f6-889b-4256-95d8-14a5c2cb4804)\
+![top_ids_step1](https://github.com/user-attachments/assets/fce3d6d0-65cc-403d-a021-97ea73fff4e2)\
+![finished_stpe1](https://github.com/user-attachments/assets/44e53475-0187-4766-a357-142fc9807670)
+
+<hr>
+
+   * #### step = 2
+
+   * по матрице `word_ids`, полученной на шаге `step = 1` извлекаются векторные представления токенов из матрицы `target` эмбеддингов натренированной модели и вместе с матрицей `encoder_outputs`, продублированной на количество `beam_size` подается на вход в декодер. Из декодера получаем матрицы `logits` и `attention`\
+![docoder_step2](https://github.com/user-attachments/assets/bd763139-35a1-4253-8136-2266e385430c)
+
+   * проходим вышеописанные операции и получаем после шага 2 матрицы `word_ids`, `cum_log_probs`, `finished`, и словарь `extra_vars`\
+![log_probs_step2](https://github.com/user-attachments/assets/3e43f9b0-3b5d-4c9a-ab06-ee4ff664962b)\
+![total_probs_step2](https://github.com/user-attachments/assets/f418b551-d4eb-4d3e-8921-a88d24a928e2)\
+![top_ids_stpe2](https://github.com/user-attachments/assets/5638d751-a1a0-472a-bb34-36e0eacda636)\
+![finished_step2](https://github.com/user-attachments/assets/ba010d1c-0d06-4f34-bc20-9720a4a89d42)
+
+<hr>
+
+   * #### step = 3
+
+   * по матрице `word_ids`, полученной на шаге `step = 2` извлекаются векторные представления токенов из матрицы `target` эмбеддингов натренированной модели и вместе с матрицей `encoder_outputs`, продублированной на количество `beam_size` подается на вход в декодер. Из декодера получаем матрицы `logits` и `attention`\
+![decoder_step3](https://github.com/user-attachments/assets/612680f7-9830-4767-9a7b-b7545190e3cd)
+
+   * проходим вышеописанные операции и получаем после шага 3 матрицы `word_ids`, `cum_log_probs`, `finished`, и словарь `extra_vars`\
+![log_probs_step3](https://github.com/user-attachments/assets/879fa585-034e-4e02-b689-bf7efe9700d5)\
+![total_probs_step3](https://github.com/user-attachments/assets/8d7ac731-cb60-468e-b5db-7cb0e820f688)\
+![top_ids_step3](https://github.com/user-attachments/assets/9d1d977f-3792-4638-b544-40c70ef4d253)\
+![finished_step3](https://github.com/user-attachments/assets/83c737bf-155e-4f3f-9109-196428168808)
 
 
+   * на этом шаге цикл прерывается, т.к. декодером были сгенерированы токены окончания последовательности `</s>` с id = 2 
+  
+<hr>
 
-
-
-
-
-
-
-
+Полученные последовательности id токенов декодируются и получаются гипотезы перевода `source` предложения. **Количество гипотез не может быть больше beam_size, т.e. если мы хотим получить 3 альтернативных варианта перевода, то нам необходимо установить beam_size=3**. Фактически, в качестве результата у нас 2 гипотезы, 1-я гипотеза будет содержать последовательности наивероятнейших токенов, получаемых и нескольких распределений.\
+![decode_tokens](https://github.com/user-attachments/assets/36d8198b-d119-40e6-ad7a-fd2bc60a27bb)
 
