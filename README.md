@@ -23,4 +23,4 @@
      - #### [Механизм затухания коэффициента скорости обучения](https://github.com/dmt-zh/Transformers-Full-Review/blob/main/training/README.md#meханизм-затухания-коэффициента-скорости-обучения)
      - #### [Механизм усреднения чекпойнтов](https://github.com/dmt-zh/Transformers-Full-Review/blob/main/training/README.md#meханизм-усреднения-чекпойнтов)
 
-- ## [Механизм инференса]()
+- ## [Механизм инференса](https://github.com/dmt-zh/Transformers-Full-Review/tree/main/inference#инференс-модели-с-помощью-фреймворка-opennmt-tf)
