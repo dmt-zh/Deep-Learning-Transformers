@@ -399,6 +399,95 @@ outputs = [tf.transpose](https://www.tensorflow.org/api_docs/python/tf/transpose
 
 <hr>
 
+- ##### В ДЕКОДЕРЕ ВЕКТОРНОЕ ПРЕДСТАВЛНЕНИЕ ТОКЕНОВ `target` ЯЗЫКА:
+
+   * сформированная матрица `inputs`с помощью функции `tf.nn.embedding_lookup`умножается на квадратный корень `num_units` (в нашем примере num_units=4)  → `inputs` = inputs *  $\sqrt{num  units}$
+   ![decoder_1](https://github.com/user-attachments/assets/1a823916-6b3b-4206-83ab-933c153a43c6)
+
+   * применяется  `dropout` (параметр `dropout` из конфигурационного файла)
+   ![decoder_2](https://github.com/user-attachments/assets/3326414f-380f-4693-a8c1-fa09b499afee)
+
+   * по размерности батча матрицы `inputs`, с помощью функции [future_mask](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/transformer.py#L21) строится тензор маски `future_mask`. При обучении декодера будущие токены последовательности будут скрыты, декодер имеет доступ только к текущему токену и предыдущим
+  ![decoder_3](https://github.com/user-attachments/assets/2a4835d0-29af-4dd8-bdc0-07088347b6b9)
+
+   * по матрице, полученной в энкодере, с помощью функции [tf.sequence_mask](https://www.tensorflow.org/api_docs/python/tf/sequence_mask) формируется тензор маски `memory_mask`
+  ![decoder_4](https://github.com/user-attachments/assets/ebafaa91-c986-4e10-8996-8d80954ec838)
+
+
+   * в цикле, для каждого слоя `layer`, равное количеству параметра `Layers` матрица `inputs`, тензор маски `future_mask`, тензор маски `memory_mask` и матрица полученная после энкодера `encoder_outputs` передаются в слой `layer`, результат, возвращаемый `layer` - `inputs` передается в следующий `layer`. Например, если у нас 6 слоев, то результат из первого слоя будет входным результатом для второго слоя и т.д. Из каждого слоя возвращается и сохраняется в список матрица `attention`, образованная в слое `cross_attention` (или `encoder-decoder attention`). В каждом слое происходят ниже описанные преобразования\
+![decoder_5](https://github.com/user-attachments/assets/6c5916ac-6b4b-4000-9b5a-4ef1684a54a2)
+
+
+  <hr>
+
+   * матрица `inputs` и матрица маски `future_mask` преобразуются с помощью слоя `self attention`. Полный механизм матричных преобразований описан в разделе энкодера. Здесь же перечислим основные шаги:\
+    ━ 1) матрица `inputs` проходит через слой нормализации\
+    ━ 2) рассчитывается матрица `queries` и делится на количество голов\
+    ━ 3) разделенная на количество голов матрица `queries` делится на квадратный корень `num_units_per_head`\
+    ━ 4) рассчитывается матрица `keys` и делиться на количество голов\
+    ━ 5) рассчитывается матрица `values` и делиться на количество голов\
+    ━ 6) рассчитывается матрицы `relative_repr_keys` и `relative_repr_values`\
+    ━ 7) скалярное произведение матриц `queries` и `keys`\
+    ━ 8) матрица `queries` перемножается с матрицей `relative_repr_key`\
+    ━ 9) к скалярному произведению матриц прибавляется матрица `matmul_with_relative_representations`\
+    ━ 10) преобразование с помощью матрицы `future_mask`\
+    ━ 11) применяется функция активация `softmax`\
+    ━ 12) применяется `dropout` (параметр `attention_dropout` из конфигурационного файла)\
+    ━ 13) перемножение с матрицей `values` с образованием матрицы `heads`\
+    ━ 14) перемножение с матрицей `relative_repr_values`\
+    ━ 15) сложение матрицы `heads` с матрицей `matmul_with_relative_representations`\
+    ━ 16) объединения голов (матриц `heads`) в общую матрицу\
+    ━ 17) линейное преобразование\
+    ━ 18) применяется `dropout` (параметр `dropout` из конфигурационного файла)\
+    ━ 19) применяется механизм `residual connection`
+
+      После вышеперечисленных преобразований получаем матрицу `outputs`
+![decoder_sa](https://github.com/user-attachments/assets/fafe4571-f913-4cef-9f72-378bb680f29e)
+
+  <hr>
+
+   * матрица после слоя `self attention`, матрица маски `memory_mask`, и матрица полученная в энкодере `encoder_outputs` подаются на вход слоя `cross attention`. Полный механизм матричных преобразований описан в разделе энкодера. Здесь же перечислим основные шаги:\
+    ━ 1) матрица `inputs` проходит через слой нормализации\
+    ━ 2) рассчитывается матрица `queries` и делится на количество голов\
+    ━ 3) разделенная на количество голов матрица `queries` делится на квадратный корень `num_units_per_head`\
+    ━ 4) рассчитывается матрица `keys`  **по матрице энкодера** и делиться на количество голов\
+    ━ 5) рассчитывается матрица `values` **по матрице энкодера** и делиться на количество голов\
+    ━ 6) рассчитывается матрицы `relative_repr_keys` и `relative_repr_values`\
+    ━ 7) скалярное произведение матриц `queries` и `keys`\
+    ━ 8) матрица `queries` перемножается с матрицей `relative_repr_key`\
+    ━ 9) к скалярному произведению матриц прибавляется матрица `matmul_with_relative_representations`\
+    ━ 10) преобразование с помощью матрицы `memory_mask`\
+    ━ 11) применяется функция активация `softmax`, получаем матрицу `attention`, которая **возвращается из этого слоя**\
+    ━ 12) применяется `dropout` (параметр `attention_dropout` из конфигурационного файла)\
+    ━ 13) перемножение с матрицей `values` с образованием матрицы `heads`\
+    ━ 14) перемножение с матрицей `relative_repr_values`\
+    ━ 15) сложение матрицы `heads` с матрицей `matmul_with_relative_representations`\
+    ━ 16) объединения голов (матриц `heads`) в общую матрицу\
+    ━ 17) линейное преобразование\
+    ━ 18) применяется `dropout` (параметр `dropout` из конфигурационного файла)\
+    ━ 19) применяется механизм `residual connection`
+
+      После вышеперечисленных преобразований получаем матрицу `outputs` и матрицу `attention`
+![decoder_cra](https://github.com/user-attachments/assets/39f9e844-a4e1-49ac-9cdf-35cd1068e528)
+
+  <hr>
+
+   * матрица `outputs` передается в нейросеть прямого распространения (Feed Forward Network):\
+    ━ 1) применяется слой нормализации LayerNorm()[⬆️](https://github.com/dmt-zh/Transformers-Full-Review/tree/main/training#слой-нормализации-класс-layernorm)\
+    ━ 2) линейное преобразование класс Dense()[⬆️](https://github.com/dmt-zh/Transformers-Full-Review/tree/main/training#линейное-преобразование-класс-dense). Линейное преобразование с функцией активации ReLU [tf.nn.relu](https://www.tensorflow.org/api_docs/python/tf/nn/relu)\
+    ━ 3) применяется  `dropout` (параметр `ffn_dropout` из конфигурационного файла)\
+    ━ 4) линейное преобразование класс Dense()[⬆️](https://github.com/dmt-zh/Transformers-Full-Review/tree/main/training#линейное-преобразование-класс-dense)\
+    ━ 5) применяется  `dropout` (параметр `dropout` из конфигурационного файла)\
+    ━ 6) применяется механизм `residual connection`\
+![decoder_ffn](https://github.com/user-attachments/assets/608b53ea-568a-44bd-b0a9-861fedf47a93)
+
+
+  <hr>
+
+   * после преобразования матрицы `outputs` с помощью Feed Forward Network, полученная матрица `outputs` проходит слой нормализации LayerNorm()[⬆️](https://github.com/dmt-zh/Transformers-Full-Review/tree/main/training#слой-нормализации-класс-layernorm)\
+![decoder_ffn_ln](https://github.com/user-attachments/assets/ae758d4e-cbc8-4b8a-842d-048a0bfb0535)
+
+  <hr>
 
 
 
