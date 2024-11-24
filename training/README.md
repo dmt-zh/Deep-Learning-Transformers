@@ -487,7 +487,7 @@ outputs = [tf.transpose](https://www.tensorflow.org/api_docs/python/tf/transpose
 ![decoder_ffn_ln](https://github.com/user-attachments/assets/ae758d4e-cbc8-4b8a-842d-048a0bfb0535)
 
   <hr>
-* массив матриц `attention` из каждого слоя преобразуется с помощью заданной стратегии обработки. По дефолту определена стратегия `FIRST_HEAD_LAST_LAYER`, т.е. будет взята матрица `attention` полученная на последнем слое, и у этой матрице будет взята первая голова\
+   * массив матриц `attention` из каждого слоя преобразуется с помощью заданной стратегии обработки. По дефолту определена стратегия `FIRST_HEAD_LAST_LAYER`, т.е. будет взята матрица `attention` полученная на последнем слое, и у этой матрице будет взята первая голова\
 ![mha_reduction](https://github.com/user-attachments/assets/2da1c812-acee-4eab-b121-09dc28f98753)
 
   <hr>
@@ -606,8 +606,58 @@ outputs = [tf.transpose](https://www.tensorflow.org/api_docs/python/tf/transpose
    ├── [def compute_loss(outputs, labels) class SequenceToSequence(model.SequenceGenerator)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/models/sequence_to_sequence.py#L424) модуль `sequence_to_sequence.py`\
    ├── [def guided_alignment_cost()](https://github.com/OpenNMT/OpenNMT-tf/blob/master/opennmt/utils/losses.py#L126) модуль `utils/losses.py`
 
-- Таким образом, итеративно, в процессе обучения модели с алайнментом мы корректируем значение лосс функции (увеличивая ее значение) и таким образом будем "принуждать" оптимизатор минимизировать функцию потерь с учетом влияния алайнмента. На картинке ниже показаны распределения вероятностей матриц `attention`   токенов `target` языка к токенам `source` полностью обученных моделей без алайнмента и с алайнментом. По распределениям видно, что по вероятностям матрицы `attention` модели с алайнментом токены `[▁П, ровер, ьте]` можно корректно сопоставить с токеном `▁Check`, а по матрице `attention` без алайнмента нельзя.
+- Таким образом, итеративно, в процессе обучения модели с алайнментом мы корректируем значение лосс функции (увеличивая ее значение) и таким образом будем "принуждать" оптимизатор минимизировать функцию потерь с учетом влияния алайнмента. На картинке ниже показаны распределения вероятностей матриц `attention`   токенов `target` языка к токенам `source` полностью обученных моделей без алайнмента и с алайнментом. По распределениям видно, что по вероятностям матрицы `attention` модели с алайнментом токены `[▁П, ровер, ьте]` можно корректно сопоставить с токеном `▁Check`, а по матрице `attention` без алайнмента нельзя.\
 ![alignment](https://github.com/user-attachments/assets/6352826b-c3e9-419a-be02-5eb03ff6839c)
+
+<hr>
+
+- ##### МЕХАНИЗМ РАСЧЕТА И ПРИМЕНЕНИЯ ГРАДИЕНТОВ:
+
+   * полученное значение `loss` корректируется на значение `loss_scale` (изначальное это значение равно [32 768]()) класса оптимизатора `LazyAdam`:\
+    `scaled_loss = optimizer.get_scaled_loss(loss)`  → `scaled_loss = 40.640914 * 32 768 = 1 331 721.5`
+
+   * по полученному выше значению `scaled_loss` и весам модели [trainable_weights](https://github.com/dmt-zh/Transformers-Full-Review/blob/main/training/model.md), с помощью функции `gradient` класса [tf.GradientTape](https://www.tensorflow.org/api_docs/python/tf/GradientTape) рассчитываются градиенты. Градиенты - это производные по весам модели. Расчет градиентов достаточно сложен и основан на алгоритме обратного распространения ошибки (backpropagation).
+   
+   * Суть этого метода заключается в том, что на основании полученного значения `scaled_loss` и матрицы весов модели `trainable_weights` расcчитвываются производные весов модели слева направо, по всему графу вычисления. Т.е. мы берем значение лосс функции `scaled_loss` и находим производные для значений полученных на выходе из декора, потом для значений полученных в энкодере, и так до момента исходных значений модели. Цель - найти значение производных таким образом, чтобы минимизировать функцию потерь. Концептуально, желаемая схема обучения нейросети выглядит примерно так: функция потерь принимает минимальное значение → находим соответствующие этому значению веса → ошибка минимальна → предсказание нейросети точное.
+
+   * Визуально схема расчета вектора градиентов можно отобразить следующим образом:\
+![backprop](https://github.com/user-attachments/assets/ff9c5aaf-e012-47c1-b148-7a1e16b6fd58)
+
+   * Визуализация механизма метода обратного распространения (на простом примере):\
+![image](https://habrastorage.org/files/627/6e1/d36/6276e1d365ba4f8497cd41fb110d7619.gif)
+
+   * при тренировке со смешанной точностью (FP16), с помощью функции оптимизатора `optimizer.get_unscaled_gradients(gradients)` градиенты делятся на значение `loss_scale`; ниже представлен срез весов модели и ее градиентов (начало и конец матрицы)\
+![scale_grads](https://github.com/user-attachments/assets/fcde665e-916d-4290-a3d5-b902df0e2275)
+
+   * таким образом, получаем матрицу градиентов, размер этой матрицы будет равен размеру матрицы весов модели, т.е. если у нас в модели 1 млн. параметров, то и матрица градиентов будет содержать 1 млн. значений
+
+   * после расчета матрицы градиентов для всех групп (батчей) {+ градиенты аккумулируются +}. Например, при `effective batch size = 200 000` и `batch size = 6 250`, количество групп будет равно `32`, т.е. после расчета градиентов, у нас будет 32 матрицы градиентов - для каждого батча, своя матрица градиентов. Аккумулирование градиентов происходит путем сложения матриц друг с другом. Помимо аккумулирования матриц градиентов, так же {+ аккумулируются путем сложения значения полученные в лосс функции +} `loss` и `loss_token_normalizer` (общее количество `target` токенов в батче) с формирование переменных:
+    ━ `loss = all_reduce_sum(loss)`\
+    ━ `sample_size = all_reduce_sum(loss_token_normalizer)`\
+
+   * после того как будут суммированы матрицы градиентов, `loss` и `loss_token_normalizer` значение градиентов делиться на общее количество токенов в группе `sample_size`. Для примера, ниже представлен механизм для трех батчей с общим количеством токенов 146\
+![acc_grads](https://github.com/user-attachments/assets/257d19db-ed62-4533-8120-3fa4aa3af74d)
+
+   * с помощью функции [apply_gradients](https://www.tensorflow.org/api_docs/python/tf/keras/mixed_precision/LossScaleOptimizer#apply_gradients) класса оптимизатора применяются градиенты к весам модели, т.е. происходит обновление весов модели. Реализация механизма обновления весов оптимизатора [Adam](https://github.com/keras-team/keras/blob/v3.3.3/keras/src/optimizers/adam.py#L115). Алгоритм обновления весов на примере одного значения из нашего примера:\
+    ━ `momentums` и `velocities` - изначально инициализируются нулями. Они содержат значения импульсов для каждого веса модели и с каждым шагом будут корректироваться и обновляться\
+    ━ `alpha` - адаптивное значение параметра `learning rate`\
+![apply_grads](https://github.com/user-attachments/assets/7ffb102a-02d2-4628-b9f3-9edd4c2cdfe3)
+
+   * при использовании другого типа оптимизатора механизм расчета и применения градиентов будет отличаться.
+
+   **Упрощенная последовательность вызова**:\
+   ├── [def __call__() class Trainer](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/training.py#L57) модуль `training.py`\
+   ├── [def _steps() class Trainer](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/training.py#L209C4-L209C45) модуль `training.py`\
+   ├── [def _accumulate_gradients(batch) class Trainer](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/training.py#L287) модуль `training.py`\
+   ├── [def compute_gradients() class Model(tf.keras.layers.Layer)](https://github.com/OpenNMT/OpenNMT-tf/blob/master/opennmt/models/model.py#L223) модуль `model.py`\
+   ├── [def _accumulate_loss() class Trainer](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/training.py#L264) модуль `training.py`\
+   ├── [def __call__() class GradientAccumulator](https://github.com/OpenNMT/OpenNMT-tf/blob/master/opennmt/optimizers/utils.py#L116) модуль `optimizers/utils.py`\
+   ├── [def _apply_gradientss() class Trainer](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/training.py#L300) модуль `training.py`
+
+<hr>
+
+- ##### после применения градиентов, значение лосс функции делится на общее количество токенов, `loss = float(loss) / float(sample_size)` → `40.6409149 / 12 = 3.38674291`.
+    Именно это значение и будет отображено у нас в лога тренировки: Step = 1 ; Loss = 3.386743. И по этому значению будет строиться график функции потерь тренировки, отображаемый в Tensorboard
 
 <hr>
 
