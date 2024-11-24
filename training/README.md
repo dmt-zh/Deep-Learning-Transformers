@@ -351,7 +351,7 @@ outputs = [tf.transpose](https://www.tensorflow.org/api_docs/python/tf/transpose
    * матрица `heads` преобразуется в размерность исходного батча через функцию объединения голов [combine_heads](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/transformer.py#L63) - т.е. выполняем обратные операции `split_heads` - получаем матрицу `combined`\
 ![combine_heads](https://github.com/user-attachments/assets/7c9ea205-f5bc-4985-b8ac-96f07eae9219)
 
-   * матрица `combined` проходит линейное преобразование, после которого получаем матрицу `outputs` → `outputs = linear_output(combined)`. Линейной преобразование проходит полностью идентично с 1-го по 8-й шаг описанный в классе Dense()[⬆️](https://github.com/dmt-zh/Transformers-Full-Review/edit/main/training/README.md#линейное-преобразование-класс-dense)
+   * матрица `combined` проходит линейное преобразование, после которого получаем матрицу `outputs` → `outputs = linear_output(combined)`. Линейной преобразование проходит полностью идентично с 1-го по 8-й шаг описанный в классе Dense()[⬆️](https://github.com/dmt-zh/Transformers-Full-Review/blob/main/training/README.md#линейное-преобразование-класс-dense)
 
    * к матрице `outputs` применяется  `dropout` (параметр `dropout` из конфигурационного файла)\
 ![outputs_drop](https://github.com/user-attachments/assets/71152b2b-43a9-4fab-b852-e1b3717c9139)
