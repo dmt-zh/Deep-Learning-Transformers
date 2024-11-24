@@ -13,8 +13,8 @@
 
 - ## [Механизм тренировочного процесса](https://github.com/dmt-zh/Deep-Learning-Transformers/tree/main/training)
   - ### [Инициализация](https://github.com/dmt-zh/Deep-Learning-Transformers/tree/main/training#инициализация)
-  - ### [Тренировочный процесс]()
-     - #### [Энкодер]()
+  - ### [Тренировочный процесс](https://github.com/dmt-zh/Transformers-Full-Review/tree/main/training#тренировочный-процесс)
+     - #### [Энкодер](https://github.com/dmt-zh/Transformers-Full-Review/tree/main/training#в-энкодере-векторное-представлнение-токенов-source-языка)
      - #### [Декодер]()
      - #### [Расчет функции потерь]()
      - #### [Механизм алайнмента]()
