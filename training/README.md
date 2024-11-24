@@ -613,7 +613,7 @@ outputs = [tf.transpose](https://www.tensorflow.org/api_docs/python/tf/transpose
 
 - ##### МЕХАНИЗМ РАСЧЕТА И ПРИМЕНЕНИЯ ГРАДИЕНТОВ:
 
-   * полученное значение `loss` корректируется на значение `loss_scale` (изначальное это значение равно [32 768]()) класса оптимизатора `LazyAdam`:\
+   * полученное значение `loss` корректируется на значение `loss_scale` (изначальное это значение равно [32 768](https://www.tensorflow.org/api_docs/python/tf/keras/mixed_precision/LossScaleOptimizer)) класса оптимизатора `LazyAdam`:\
     `scaled_loss = optimizer.get_scaled_loss(loss)`  → `scaled_loss = 40.640914 * 32 768 = 1 331 721.5`
 
    * по полученному выше значению `scaled_loss` и весам модели [trainable_weights](https://github.com/dmt-zh/Transformers-Full-Review/blob/main/training/model.md), с помощью функции `gradient` класса [tf.GradientTape](https://www.tensorflow.org/api_docs/python/tf/GradientTape) рассчитываются градиенты. Градиенты - это производные по весам модели. Расчет градиентов достаточно сложен и основан на алгоритме обратного распространения ошибки (backpropagation).
