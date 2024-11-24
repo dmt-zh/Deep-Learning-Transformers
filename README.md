@@ -11,16 +11,16 @@
 
 <br>
 
-- ## [Механизм тренировочного процесса](https://github.com/dmt-zh/Deep-Learning-Transformers/tree/main/training)
-  - ### [Инициализация](https://github.com/dmt-zh/Deep-Learning-Transformers/tree/main/training#инициализация)
-  - ### [Тренировочный процесс](https://github.com/dmt-zh/Transformers-Full-Review/tree/main/training#тренировочный-процесс)
+- ## [Механизм тренировочного процесса](https://github.com/dmt-zh/Transformers-Full-Review/blob/main/training/training.md#тренировочный-процесс)
+  - ### [Инициализация](https://github.com/dmt-zh/Transformers-Full-Review/blob/main/training/training.md#инициализация)
+  - ### [Тренировочный процесс](https://github.com/dmt-zh/Transformers-Full-Review/blob/main/training/training.md#тренировочный-процесс)
      - #### [Энкодер](https://github.com/dmt-zh/Transformers-Full-Review/tree/main/training#в-энкодере-векторное-представлнение-токенов-source-языка)
-     - #### [Декодер]()
-     - #### [Расчет функции потерь]()
-     - #### [Механизм алайнмента]()
-     - #### [Механизм расчета и применения градиентов]()
-     - #### [Применение экспоненциального скользящего среднего]()
-     - #### [Механизм затухания коэффициента скорости обучения]()
-     - #### [Механизм усреднения чекпойнтов]()
+     - #### [Декодер](https://github.com/dmt-zh/Transformers-Full-Review/blob/main/training/training.md#в-декодере-векторное-представлнение-токенов-target-языка)
+     - #### [Расчет функции потерь](https://github.com/dmt-zh/Transformers-Full-Review/blob/main/training/training.md#рассчет-функции-потерь)
+     - #### [Механизм алайнмента](https://github.com/dmt-zh/Transformers-Full-Review/blob/main/training/training.md#механизм-алайнмента)
+     - #### [Механизм расчета и применения градиентов](https://github.com/dmt-zh/Transformers-Full-Review/blob/main/training/training.md#механизм-расчета-и-применения-градиентов)
+     - #### [Применение экспоненциального скользящего среднего](https://github.com/dmt-zh/Transformers-Full-Review/blob/main/training/training.md#применение-экспоненциального-скользящего-среднего)
+     - #### [Механизм затухания коэффициента скорости обучения](https://github.com/dmt-zh/Transformers-Full-Review/blob/main/training/training.md#meханизм-затухания-коэффициента-скорости-обучения)
+     - #### [Механизм усреднения чекпойнтов](https://github.com/dmt-zh/Transformers-Full-Review/blob/main/training/training.md#meханизм-усреднения-чекпойнтов)
 
 - ## [Механизм инференса]()
