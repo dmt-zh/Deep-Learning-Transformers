@@ -481,16 +481,95 @@ outputs = [tf.transpose](https://www.tensorflow.org/api_docs/python/tf/transpose
     ━ 6) применяется механизм `residual connection`\
 ![decoder_ffn](https://github.com/user-attachments/assets/608b53ea-568a-44bd-b0a9-861fedf47a93)
 
-
   <hr>
 
    * после преобразования матрицы `outputs` с помощью Feed Forward Network, полученная матрица `outputs` проходит слой нормализации LayerNorm()[⬆️](https://github.com/dmt-zh/Transformers-Full-Review/tree/main/training#слой-нормализации-класс-layernorm)\
 ![decoder_ffn_ln](https://github.com/user-attachments/assets/ae758d4e-cbc8-4b8a-842d-048a0bfb0535)
 
   <hr>
+* массив матриц `attention` из каждого слоя преобразуется с помощью заданной стратегии обработки. По дефолту определена стратегия `FIRST_HEAD_LAST_LAYER`, т.е. будет взята матрица `attention` полученная на последнем слое, и у этой матрице будет взята первая голова\
+![mha_reduction](https://github.com/user-attachments/assets/2da1c812-acee-4eab-b121-09dc28f98753)
 
+  <hr>
 
+   * матрица `outputs` после слоя нормализации преобразуется с помощью выходного линейного слоя декодера, размерность которого равна `vocab_size` х `num_units` (в нашем примере 26 х 4) с образованием матрицы `logits`. Это преобразование в декодере - финальная операция\
+![logits](https://github.com/user-attachments/assets/9cd0fd8a-b524-46be-a130-97eec354d8ee)
 
+  <hr>
+
+   * таким образом, после преобразований в декодере батча токенов `target` языка на выходе из декодера у нас две матрицы - матрица `logits` и матрица значений `attention` из последнего слоя `cross attention`. Схематически, полный цикл преобразований в декодере, можно представить следующим образом\
+![docoder_full](https://github.com/user-attachments/assets/2cdb2f97-6811-4fb0-b5e9-f9117bba0ccd)
+
+  <hr>
+
+   **Decoder. Упрощенная последовательность вызова:**\
+   ├── [def __call__() | class Model(tf.keras.layers.Layer)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/models/model.py#L92C5-L92C17) модуль `model.py`\
+   ├── [def call() | class SequenceToSequence(model.SequenceGenerator)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/models/sequence_to_sequence.py#L165) модуль `sequence_to_sequence.py`\
+   ├── [def _decode_target() | class SequenceToSequence(model.SequenceGenerator)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/models/sequence_to_sequence.py#L219) модуль `sequence_to_sequence.py`\
+   ├── [def call() | class WordEmbedder(TextInputter)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/inputters/text_inputter.py#L505) модуль `text_inputter.py`\
+   ├── [def call() | class Decoder(tf.keras.layers.Layer)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/decoders/decoder.py#L205) модуль `decoder.py`\
+   ├── [def forward() | class SelfAttentionDecoder(decoder.Decoder)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/decoders/self_attention_decoder.py#L177) модуль `self_attention_decoder.py`\
+   ├── [def _run() | class SelfAttentionDecoder(decoder.Decoder)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/decoders/self_attention_decoder.py#L105C5-L105C14) модуль `self_attention_decoder.py`\
+   ├── [def call() | class SelfAttentionDecoderLayer(tf.keras.layers.Layer)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/transformer.py#L574) модуль `layers/transformer.py`\
+   ├── [def call() | class LayerWrapper(tf.keras.layers.Layer)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/common.py#L133) модуль `layers
+/common.py`\
+   ├── [def call() | class MultiHeadAttention(tf.keras.layers.Layer)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/transformer.py#L284) модуль `layers/transformer.py`\
+   ├── [def call() | class Dense(tf.keras.layers.Dense)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/common.py#L59) модуль `layers
+/common.py`\
+   ├── [def call() | class LayerWrapper(tf.keras.layers.Layer)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/common.py#L133) модуль `layers
+/common.py`\
+   ├── [def call() | class MultiHeadAttention(tf.keras.layers.Layer)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/transformer.py#L284) модуль `layers/transformer.py`\
+   ├── [def call() | class Dense(tf.keras.layers.Dense)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/common.py#L59) модуль `layers
+/common.py`\
+   ├── [def call() | class LayerWrapper(tf.keras.layers.Layer)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/common.py#L133) модуль `layers
+/common.py`\
+   ├── [def call() | class FeedForwardNetwork(tf.keras.layers.Layer)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/transformer.py#L146) модуль `layers/transformer.py`\
+   ├── [def call() | class LayerNorm(tf.keras.layers.LayerNormalization)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/common.py#L91) модуль `layers/common.py`\
+   ├── [def reduce() | class MultiHeadAttentionReduction](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/transformer.py#L179) модуль `layers/transformer.py`\
+   ├── [def call() | class Dense(tf.keras.layers.Dense)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/common.py#L59) модуль `layers
+/common.py`
+
+<hr>
+
+- ##### РАССЧЕТ ФУНКЦИИ ПОТЕРЬ:
+
+- матрица `logits` полученная после преобразований в декодере и батч `target` языка передаются в функцию [cross_entropy_sequence_loss](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/utils/losses.py#L28). Внутри функции происходят следующие преобразования:\
+![cross_entropy_loss](https://github.com/user-attachments/assets/ef7a366f-c7ec-4a21-9954-cc187a54ea99)
+
+   * рассчитывается матрица `cross_entropy` с помощью функции [_softmax_cross_entropy](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/utils/losses.py#L18C5-L18C27)\
+    ━ 1) значения матрицы `logits` c помощью функции [tf.cast](https://www.tensorflow.org/api_docs/python/tf/cast) приводится к типу float32 → `logits = tf.cast(logits, tf.float32)`\
+    ━ 2) рассчитывается значение переменной `num_classes` по размерности матрицы `logits` → `num_classes = logits.shape[-1]`; поскольку размерность матриц `logits` равна [3, 4, 26], то значение переменной будет равно 26\
+    ━ 3) рассчитывается значение переменной `on_value` → `1.0 - label_smoothing` (параметр `label_smoothing` берется из тренировочного конфига); значение переменной будет равно 0,9\
+    ━ 4) рассчитывается значение переменной `off_value` → `label_smoothing / (num_classes - 1)`; 1/(26 - 1) = 0,004\
+    ━ 5) с помощью функции [tf.one_hot](https://www.tensorflow.org/api_docs/python/tf/one_hot) рассчитывается матрица `smoothed_labels` → `tf.one_hot(labels, 26, 0.9, 0.004)`; это преобразование работает следующим образом - из батча токенов `target` языка извлекаются индексы выходящих токенов `ids_out`, строится матрица глубиной 26 элементов и если индекс элемента матрицы совпадает с индексом из матрицы `ids_out`, то такой индекс заполняется значением из `on_value` все остальные элементы заполняются значением из `off_value`  \
+![smothed_labels](https://github.com/user-attachments/assets/369eb9b8-5fa0-4226-8738-6c15ad009b17)\
+    ━ 6) с помощью функции [tf.nn.softmax_cross_entropy_with_logits](https://www.tensorflow.org/api_docs/python/tf/nn/softmax_cross_entropy_with_logits) вычисляется softmax кросс-энтропия между матрицами `smoothed_labels` и `logits`. Кросс-энтропия измеряет расхождение между двумя вероятностными распределениями. Алгоритм этой функции следующий:\
+            - вычисляется экспонента матрицы `logits` - эквивалентно numpy.exp(logits)\
+            - суммируются элементы матрицы построчно - эквивалентно numpy.sum(numpy.exp(logits), axis=-1)\
+            - берется десятичный логарифм полученной матрицы и транспонируется по размерности матрицы 
+ `logits` (в нашем примере 3 х 4 х 1) эквивалентно numpy.log(numpy.sum(numpy.exp(logits), axis=-1)).reshape(3, 4, 1)\
+            - из матрицы `logits` вычитается матрица полученная на прошлом шаге с образованием матрицы `logsoftmax`  →  `logsoftmax = logits - numpy.log(numpy.sum(numpy.exp(logits), axis=-1)).reshape(3, 4, 1)`\
+            - считается матрица `cross_entropy` - матрица `logsoftmax` умножается на отрицательную матрицу `logits` и произведение суммируется построчно  →  `cross_entropy = numpy.sum(logsoftmax * -labels, axis=-1)`\
+![cross_entropy](https://github.com/user-attachments/assets/6f0a0d03-ad69-460e-aa9d-161c0af9b498)
+
+   * с помощью функции [tf.sequence_mask](https://www.tensorflow.org/api_docs/python/tf/sequence_mask) рассчитывается матрица весов `weight` по переменной `sequence_length` (в этой переменной находятся значения длин предложений в токенах сгруппированных в батч) и размерности матрицы `logits.shape[1]`  [3, {-4-}, 26]\
+![weight](https://github.com/user-attachments/assets/769b53a2-8936-4353-a767-abd52ffa8aad)
+
+   * с помощью функции [tf.math.reduce_sum](https://www.tensorflow.org/api_docs/python/tf/math/reduce_sum) по произведению матриц `cross_entropy` и `weight` рассчитывается переменная `loss`  →  `loss = tf.reduce_sum(cross_entropy * weight) = 39.6399841`\
+![loss](https://github.com/user-attachments/assets/8326120f-972e-4030-930d-e7dd6587fdb1)
+
+   * с помощью функции [tf.math.reduce_sum](https://www.tensorflow.org/api_docs/python/tf/math/reduce_sum) по матрицe `weight` рассчитывается переменная `loss_token_normalizer`, которая будет равна количеству токенов в батче  →  `loss_token_normalizer = tf.reduce_sum(weight) = 12`
+
+   * в результате возвращаются две переменные `loss = 39.6399841` и `loss_token_normalizer = 12`
+
+   **Упрощенная последовательность вызова**:\
+   ├── [def _accumulate_gradients(self, batch)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/training.py#L287) модуль `training.py`\
+   ├── [def compute_gradients(features, labels, optimizer) class Model(tf.keras.layers.Layer)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/models/model.py#L223) модуль `model.py`\
+   ├── [def compute_training_loss(features, labels) class Model(tf.keras.layers.Layer)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/models/model.py#L274) модуль `model.py`\
+   ├── [def compute_loss(outputs, labels) class SequenceToSequence(model.SequenceGenerator)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/models/sequence_to_sequence.py#L424) модуль `sequence_to_sequence.py`\
+   ├── [def cross_entropy_sequence_loss()](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/utils/losses.py#L28C1-L28C32) модуль `utils/losses.py`
+
+<hr>
 
 
 
