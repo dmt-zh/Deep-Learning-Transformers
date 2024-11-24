@@ -233,7 +233,7 @@ outputs = [tf.transpose](https://www.tensorflow.org/api_docs/python/tf/transpose
 
 - ##### В ЭНКОДЕРЕ ВЕКТОРНОЕ ПРЕДСТАВЛНЕНИЕ ТОКЕНОВ `source` ЯЗЫКА:
 
- * умножается на квадратный корень размерности - `inputs` = inputs *  $\sqrt{num  units}$, для примера `num_units = 4`
+   * умножается на квадратный корень размерности - `inputs` = inputs *  $\sqrt{num  units}$, для примера `num_units = 4`
 ![encoder_sqrt](https://github.com/user-attachments/assets/b5e442fd-dee6-47a1-bbae-84abcedcded3)
 
    * применяется  `dropout` (параметр `dropout` из конфигурационного файла), т.е. случайным образом значения заменяются на ноль, с помощью функции [tf.nn.dropout](https://www.tensorflow.org/api_docs/python/tf/nn/dropout). При этом все остальные значения (кроме замененных на ноль) корректируются умножением на `1/(1 - p)`, где `p` - вероятность дропаута. Это делается для того чтобы привести значения к одному масштабу что позволяет использовать одну и ту же сеть для обучения (при probability < 1.0) и инференса (при probability = 1.0). [Why input is scaled in tf.nn.dropout in tensorflow?](https://stackoverflow.com/questions/34597316/why-input-is-scaled-in-tf-nn-dropout-in-tensorflow)
@@ -241,7 +241,6 @@ outputs = [tf.transpose](https://www.tensorflow.org/api_docs/python/tf/transpose
 
    * по размерности батча, с помощью функции [tf.sequence_mask](https://www.tensorflow.org/api_docs/python/tf/sequence_mask) строится тензор маски; для нашего примера размерность батча будет `[3 3 3]` и функция возвращает маску\
 ![encoder_mask](https://github.com/user-attachments/assets/92b488bc-9701-4b6b-a807-3bf63e9184fe)
-
 
    * в цикле, для каждого слоя `layer`, равное количеству параметра `Layers` векторное представление батча (которое хранится в переменной `inputs`) и тензор маски `mask` передается в слой `layer`, результат, возвращаемый `layer` передается в следующий `layer`. Например, если у нас 6 слоев, то результат из первого слоя будет входным результатом для второго слоя и т.д.\
 ![encoder_loop](https://github.com/user-attachments/assets/420bde81-1a6d-45ae-bb62-7df80c986469)
@@ -279,13 +278,55 @@ outputs = [tf.transpose](https://www.tensorflow.org/api_docs/python/tf/transpose
     ━ 6) к полученной на прошлом шаге матрице `outputs` добавляется вектор смещения `bias` (исходные значения `bias` инициализируются со слоем `kernel` и изначально равны нулю) [tf.nn.bias_add(outputs, bias)](https://www.tensorflow.org/api_docs/python/tf/nn/bias_add)\
 ![dense_6](https://github.com/user-attachments/assets/e1e1473c-5ca7-4996-bdaa-9629942e5017)
     ━ 7) после добавления `bias` матрица `outputs` проходит активацию линейного слоя [activation(outputs)](https://www.tensorflow.org/api_docs/python/tf/keras/layers/Dense). Активация линейного слоя - это применение функции к матрице. Поскольку функция для слоя `tf.keras.layers.Dense` не задается, по дефолту, функция активации равна `a(x) = x`, т.е. матрица остается без изменений\
-![dense_7](https://github.com/user-attachments/assets/49b56436-f50d-471d-98b0-5e5e5f328def)
+![dense_7](https://github.com/user-attachments/assets/49b56436-f50d-471d-98b0-5e5e5f328def)\
     ━ 8) после активации линейного слоя матрица `outputs` переформируется `tf.reshape(outputs, shape[:-1] + [num_units])`  → `tf.reshape(outputs, [3, 3, 4])`. После этого шага мы получаем матрицу `queries`
 ![dense_8](https://github.com/user-attachments/assets/17848faf-19c0-487c-8cff-6ca021eb1a1b)
   <hr>
 
-* полученная на прошлом шаге матрица `queries` делится на количество голов (в нашей архитектуре количество голов равно 2, механизм разделения описан выше [⬆️](https://git.nordicwise.com/infra/machine-translate-utils/-/wikis/Механизм-тренировочного-процесса#рассмотрим-алгоритм-разбиения-матриц-queries-keys-и-values-на-количество-голов))
+* полученная на прошлом шаге матрица `queries` делится на количество голов (в нашей архитектуре количество голов равно 2, механизм разделения описан выше [⬆️](https://github.com/dmt-zh/Transformers-Full-Review/blob/main/training/README.md#рассмотрим-алгоритм-разбиения-матриц-queries-keys-и-values-на-количество-голов)
 ![split_heads](https://github.com/user-attachments/assets/f79a505c-461f-4a2a-b7bb-40f831e21056)
+
+   * разделенная на количество голов матрица `queries` делится на квадратный корень `num_units_per_head`:\
+   `num_units_per_head = num_units // num_heads`\
+   `num_units_per_head = 4 // 2 = 2`\
+![n_u_per_head](https://github.com/user-attachments/assets/f532fe12-cbc8-4b5a-b24c-9f68564cb5bf)
+
+   * по описанным шагам выше 1-8, рассчитывается матрица `keys` и делиться на количество голов\
+![keys](https://github.com/user-attachments/assets/485d9157-161d-48c6-a736-de3e0e748a54)
+
+   * по описанным шагам выше 1-8, рассчитывается матрица `values` и делиться на количество голов\
+![values](https://github.com/user-attachments/assets/a8ca5bfd-8cdf-497b-a83e-94b1b8fc4a5a)
+
+   * поскольку в рассматриваемом примере используется относительное позиционное кодирование (`maximum_relative_position = 8`), то следующий шаг - **относительное кодирование**:\
+    ━ 1) рассчитывается размерность матрицы `keys`\
+           `keys_length = tf.shape(keys)[2]`\
+           `keys_length = [3 2 3 2][2]`\
+           `keys_length = 3`\
+    ━ 2) формируется массив целочисленных элементов длины `keys_length`\
+           `arange = tf.range(length)`\
+           `arange = [0 1 2]`\
+    ━ 3) формируются две матрицы по оси 0 и 1 с помощью функции [tf.expand_dims(input, axis)](https://www.tensorflow.org/api_docs/python/tf/expand_dims) и из полученных матриц рассчитывается расстояние к диагонали `distance = tf.expand_dims(arange, 0) - tf.expand_dims(arange, 1)`\
+![rp_3](https://github.com/user-attachments/assets/5a4372a4-37cc-4a44-9ada-4ddf38925c65)\
+    ━ 4) матрицы расстояний к диагонали `distance` обрезается по значению `maximum_relative_position` [tf.clip_by_value(distance, -maximum_position, maximum_position)](https://www.tensorflow.org/api_docs/python/tf/clip_by_value)\
+![rp_4](https://github.com/user-attachments/assets/f2407b0c-1817-46a1-b2ab-aa3b811786df)\
+    ━ 5) к полученной на прошлом шаге матрице `distance` добавляется значение `maximum_relative_position`\
+![rp_5](https://github.com/user-attachments/assets/90b247ba-6696-42c8-b27b-11cb4c47461e)\
+    ━ 6) полученная на прошлом шаге матрица `relative_pos` используется для извлечения из матрицы `relative_position_keys`, сформированной при инициализации модели, соответствующих элементов по индексам с помощью функции `tf.nn.embedding_lookup` и формируется матрица `relative_repr_keys`\
+![rp_6](https://github.com/user-attachments/assets/e82d9262-2b4e-4dbc-b38a-e29e0432d12e)\
+    ━ 7) таким же образом формируется матрица `relative_repr_values` → `embedding_lookup(relative_position_values, relative_pos)`\
+![rp_7](https://github.com/user-attachments/assets/3ca1bcfd-74b0-486a-b1dd-b95317942857)
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
