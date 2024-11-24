@@ -1,4 +1,4 @@
-# Обзор механизмов работы фреймворка OpenNMT-tf
+# Обзор механизмов работы Transformer на примере фреймворка OpenNMT-tf
 
 ![](https://lena-voita.github.io/resources/lectures/seq2seq/transformer/model-min.png)
 
