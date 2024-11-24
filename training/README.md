@@ -171,7 +171,7 @@ random_uniform(shape, -limit, limit) ==> random_uniform((700, 8), -0.0920, 0.092
 
 <br>
 
-**{- При инициализации модели необходимо чтобы выполнялось следующее условие-}**: [num_units % num_heads](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/transformer.py#L233C12-L233C33), **т.е. размерность эмбеддингов (и соответственно `queries`, `keys` и `values`) должна быть кратна количеству голов в MultiHeadAttention.**\
+**При инициализации модели необходимо чтобы выполнялось следующее условие**: [num_units % num_heads](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/transformer.py#L233C12-L233C33), **т.е. размерность эмбеддингов (и соответственно `queries`, `keys` и `values`) должна быть кратна количеству голов в MultiHeadAttention.**\
 В действительности, матрицы `queries`, `keys` и `values` делятся на число указанное в параметре `num_heads` и формируются более маленькие матрицы, количество которых равно `num_units // num_heads`. Алгоритм реализован в функции [split_heads](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/transformer.py#L47)  модуля `transformer.py`.
 ![split_heads](https://github.com/user-attachments/assets/bf2adee9-2cc1-4d61-aa3f-d03a54543ab4)
 
@@ -283,7 +283,7 @@ outputs = [tf.transpose](https://www.tensorflow.org/api_docs/python/tf/transpose
 ![dense_8](https://github.com/user-attachments/assets/17848faf-19c0-487c-8cff-6ca021eb1a1b)
   <hr>
 
-* полученная на прошлом шаге матрица `queries` делится на количество голов (в нашей архитектуре количество голов равно 2, механизм разделения описан выше [⬆️](https://github.com/dmt-zh/Transformers-Full-Review/blob/main/training/README.md#рассмотрим-алгоритм-разбиения-матриц-queries-keys-и-values-на-количество-голов)
+   * полученная на прошлом шаге матрица `queries` делится на количество голов (в нашей архитектуре количество голов равно 2, механизм разделения описан выше [⬆️](https://github.com/dmt-zh/Transformers-Full-Review/blob/main/training/README.md#рассмотрим-алгоритм-разбиения-матриц-queries-keys-и-values-на-количество-голов)
 ![split_heads](https://github.com/user-attachments/assets/f79a505c-461f-4a2a-b7bb-40f831e21056)
 
    * разделенная на количество голов матрица `queries` делится на квадратный корень `num_units_per_head`:\
