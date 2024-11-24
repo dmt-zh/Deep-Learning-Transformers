@@ -200,14 +200,14 @@ outputs = [tf.transpose](https://www.tensorflow.org/api_docs/python/tf/transpose
 # Тренировочный процесс
 
 ### После инициализации:
-- ##### финализируется датасет, т.е. приводится в действие [весь пайплайн](https://git.nordicwise.com/infra/machine-translate-utils/-/wikis/Создание-тренировочного-датасета) подготовки данных к тренировке;
+- ##### финализируется датасет, т.е. приводится в действие [весь пайплайн](https://github.com/dmt-zh/Transformers-Full-Review/blob/main/dataset/README.md#создание-тренировочного-датасета) подготовки данных к тренировке;
      ├── [dataset = self._finalize_dataset()](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/training.py#L219) модуль `training.py`
 <hr>
 
 - ##### запускается цикл с количеством шагов, указанном в параметре `Train steps`
 <hr>
 
-- ##### на каждом шаге тренировочного цикла из сгруппированного в батчи тренировочного датасета извлекаются [группы](https://git.nordicwise.com/infra/machine-translate-utils/-/wikis/Создание-тренировочного-датасета#после-фильтрации-применяется-функция-группировки-датасета-batch_sequence_dataset-датасет-группируется-в-бакетыпартии-одинаковой-длины-чтобы-оптимизировать-эффективность-обучения-и-преобразуется-в-следующий-тип). 
+- ##### на каждом шаге тренировочного цикла из сгруппированного в батчи тренировочного датасета извлекаются [группы](https://github.com/dmt-zh/Transformers-Full-Review/blob/main/dataset/README.md#после-фильтрации-применяется-функция-группировки-датасета-batch_sequence_dataset-датасет-группируется-в-бакетыпартии-одинаковой-длины-чтобы-оптимизировать-эффективность-обучения-и-преобразуется-в-следующий-тип). 
 
    * количество групп будет равно `effective batch size` // `batch size`. Например, если у нас задан параметр `effective batch size = 200 000`, a `batch size = 6 250`, то количество групп будет равно `200 000 // 6 250 = 32`
    * в каждой из 32 групп будет 6250 токенов, таким образом суммарный объем токенов, который будет обработан за один шаг тренировки будет равен размеру `effective batch size`, т.е. 200 000 токенов.
@@ -661,12 +661,83 @@ outputs = [tf.transpose](https://www.tensorflow.org/api_docs/python/tf/transpose
 
 <hr>
 
+- ##### ПРИМЕНЕНИЕ ЭКСПОНЕНЦИАЛЬНОГО СКОЛЬЗЯЩЕГО СРЕДНЕГО
 
+   * в дефолтном конфигурационном файле модели Transformer параметр `moving_average_decay` не задан
 
+   * задав параметр `moving_average_decay` значением близким к единице (согласно [документации tensorflow](https://www.tensorflow.org/api_docs/python/tf/train/ExponentialMovingAverage)), следующий шаг - расчет экспоненциального скользящего среднего для весов модели. Согласно документации, применение `moving_average_decay` для весов модели может существенно улучшить результаты модели
 
+   * алгоритм `moving_average_decay` следующий:\
+    ━ на каждом шаге тренировки, после расчета и применения градиентов, инициализируется класс [MovingAverage](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/training.py#L435C7-L435C20)\
+    ━ после инициализации MovingAverage вызывается функция обновления весов модели\
+    ━ веса модели обновляются следующим образом:\
+             - вычисляется коэффициент затухания `decay`: `decay = 1 - min(0.9999, (1.0 + training_step) / (10.0 + training_step))`\
+             - для каждого веса модели применяется следующий алгоритм: `shadow_weigth = previous_weight - (previous_weight - current_weight) * decay` (на первом шаге тренировки previous_weight = current_weight)\
+    ━ сглаженные веса после каждого шага тренировки хранятся в классе `MovingAverage`, **{- замена натренированных весов сглаженными весами происходит только при сохранении чекпоинта -}** модели\
+![exponentional_mva](https://github.com/user-attachments/assets/89fb2e44-0509-4d25-972d-ee4affd813e0)
 
+   **Упрощенная последовательность вызова**:\
+   ├── [def __call__() class Trainer](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/training.py#L57) модуль `training.py`\
+   ├── [def __init__() class MovingAverage](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/training.py#L438) модуль `training.py`\
+   ├── [def _update_moving_average() class Trainer](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/training.py#L316) модуль `training.py`\
+   ├── [def update() class MovingAverage](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/training.py#L464) модуль `training.py`
 
+<hr>
 
+- ##### MEХАНИЗМ ЗАТУХАНИЯ КОЭФФИЦИЕНТА СКОРОСТИ ОБУЧЕНИЯ
 
+   * в механизме затухания коэффициента скорости обучения (`learning rate`) используется переменные проинициализированные в классах `NoamDecay` и `ScheduleWrapper`
 
+   * после каждого шага тренировки, в классе `ScheduleWrapper` происходят следующие преобразования:\
+    ━ с помощью функции [tf.maximum](https://www.tensorflow.org/api_docs/python/tf/math/maximum) рассчитывается переменная `step` → `tf.maximum(step - step_start, 0) = 1`\
+    ━ переменная `step` корректируется на значение `step_duration` путем целочисленного деления → `step //= step_duration = 1 // 1 = 1`\
+    ━ скорректированная на прошлом шаге переменная `step` передается в класс `NoamDecay`
+
+   * в классе `NoamDecay` происходят следующие преобразования:\
+    ━ рассчитывается переменная `step` → `step = step + 1 = 2`\
+    ━ промежуточное значение `a`: с помощью функции [tf.pow](https://www.tensorflow.org/api_docs/python/tf/math/pow) значение `model_dim` возводится в степень `-0.5`, что эквивалентно единица деленная на корень квадратный `model_dim`  → `1 / sqrt(4) = 0.5`\
+    ━ промежуточное значение `b`: с помощью функции `tf.pow` значение `step` полученное выше возводится в степень `-0.5`, что эквивалентно единица деленная на корень квадратный `step`  → `1 / sqrt(2) = 0.7071`\
+    ━ промежуточное значение `с`: с помощью функции `tf.pow` значение `warmup_steps` возводится в степень `-1.5` и умножается на значение `step`  → `(1 / 8000^1.5) * 2 = 0.000001397 * 2 = 0.000002795`\
+    ━ с помощью функции [tf.minimum](https://www.tensorflow.org/api_docs/python/tf/math/minimum) определяется минимальное значение из двух промежуточных значений b и с  → `min(b, c) → 0.000002795`\
+    ━ полученное минимальное значение умножается на промежуточное значение `a` и `scale` → `0.0000027951 * 0.5 * 2 = 0.000002795`\
+    ━ полный цикл промежуточных преобразований выглядит следующим образом `(scale * tf.pow(model_dim, -0.5) * tf.minimum(tf.pow(step, -0.5), step * tf.pow(warmup_steps, -1.5)))`\
+    ━ полученное выше значение `0.000002795` возвращается обратно в класс `ScheduleWrapper`
+
+   * в классе `ScheduleWrapper` определяется финальное значение коэффициента `learning rate = tf.maximum(learning_rate, minimum_learning_rate)` →  `learning rate = max(0.000002795, 0.0001) = 0.000002795 = 0.0001`. Именно это значение и выводится в лог тренировки: ` Step = 1 ; Learning rate = 0.000100 ; Loss = 3.386743`
+
+   * по описанному выше алгоритму построим график изменений значения `learning rate` оптимизатора для модели размерностью 768 и заданным параметром `Learning rate = 2` в конфигурационном файле тренировщика
+![lr_1](https://github.com/user-attachments/assets/f74461f0-59d7-47d8-8a60-ed80cf8cf2e3)
+
+   * а теперь построим график изменений значения `learning rate` оптимизатора для модели размерностью 768 и заданным параметром `Learning rate = 6` в конфигурационном файле тренировщика
+![lr_2](https://github.com/user-attachments/assets/d1e02cde-e85a-47cf-9860-d57456c85081)
+
+   * по графикам можно сделать вывод, что с понижением значения `warmup_steps` стремительно увеличивается значение `learning rate` оптимизатора, при этом с увеличением `Learning rate` в конфиге позволяет достичь более высоких значений `learning rate` оптимизатора что может способствовать более быстрому обучения при большой размерности модели.
+
+   * влиять на изменение значения `learning rate` можно так же с помощью параметра `start_decay_steps`, т.е. можем указать через сколько шагов после начала обучения применятся механизм `warmup_steps` и последующее затухание. На графике ниже видно, что при `start_decay_steps = 10 000`, первые 10 тыс. шагов модель обучается при фиксированном значении `learning rate`, которое равно минимуму, а после 10 тыс. шагов начинает работать механизм `warmup_steps` с затуханием
+![lr_3](https://github.com/user-attachments/assets/bc5d4bdb-ad2e-42d9-a08f-34347d96c921)
+
+   * с помощью параметра `decay_step_duration` можно увеличить длительность действия механизма `warmup_steps` и замедлить скорость затухания
+![lr_4](https://github.com/user-attachments/assets/502f4a39-eb92-4441-a61b-5cce82dd1f29)
+
+   **Упрощенная последовательность вызова**:\
+   ├── [def __call__() class ScheduleWrapper](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/schedules/lr_schedules.py#L107) модуль `schedules/lr_schedules.py`\
+   ├── [def __call__() class class NoamDecay](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/schedules/lr_schedules.py#L131) модуль `schedules/lr_schedules.py`\
+   ├── [def __call__() class ScheduleWrapper](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/schedules/lr_schedules.py#L107) модуль `schedules/lr_schedules.py`
+
+<hr>
+
+- ##### MEХАНИЗМ УСРЕДНЕНИЯ ЧЕКПОЙНТОВ
+
+   * чекпойнт (checkpoint) -  это состояние модели на определенный шаг тренировки. Чекпойнт натренированной модели хранит измененные в процессе тренировки веса модели, переменные оптимизатора по каждому слою (состоянием оптимизатора на определенный шаг тренировки), а также граф вычисления. Что представляет собой чекпойнт на примере рассматриваемой модели можно посмотреть [здесь](https://github.com/dmt-zh/Transformers-Full-Review/blob/main/training/checkpoint.md)(чекпойнт сохранен на 10-м шаге тренировки). Пример небольшого графа вычисления для простой сети представлен на скрине ниже\
+![graph](https://github.com/user-attachments/assets/0aadeb3c-a359-48a5-97fc-84fee2104bbf)\
+Оптимизатор выделен красным, обычные переменные - синим, а переменные слота оптимизатора - оранжевым. Другие узлы, выделены черным цветом. Переменные слота являются частью состояния оптимизатора, но создаются для конкретной переменной. Например, ребра 'm' выше соответствуют импульсу, который оптимизатор Адама отслеживает для каждой переменной.
+
+   * в конце тренировки, из директории модели считываются и восстанавливаются **последние** чекпойнты модели в количестве равном параметру `average_last_checkpoints`
+
+   * по архитектуре натренированной модели инициализируются веса со значением ноль для всех слоев модели
+
+   * далее в цикле, для каждого восстановленного чекпойнта считываются веса; веса каждого слоя делятся на количество чекпойнтов указанное в параметре `average_last_checkpoints` и полученные значения с помощью функции [variable.assign_add(value / num_checkpoints)](https://www.tensorflow.org/api_docs/python/tf/Variable#assign_add) прибавляются к проинициализированным выше весам (слой `embeddings` суммируется только со слоем `embeddings` и т.д.)
+
+   * механизм усреднения небольшого слоя из модели нашего примера, с усреднением двух последних чекпойнтов показан ниже\
+![avg_chkpt](https://github.com/user-attachments/assets/af56442e-8b10-4fae-98ce-ca2a9e2346eb)
 
