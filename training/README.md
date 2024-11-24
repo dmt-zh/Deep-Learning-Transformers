@@ -197,3 +197,96 @@ outputs = [tf.transpose](https://www.tensorflow.org/api_docs/python/tf/transpose
 
 <br>
 
+# Тренировочный процесс
+
+### После инициализации:
+- ##### финализируется датасет, т.е. приводится в действие [весь пайплайн](https://git.nordicwise.com/infra/machine-translate-utils/-/wikis/Создание-тренировочного-датасета) подготовки данных к тренировке;
+     ├── [dataset = self._finalize_dataset()](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/training.py#L219) модуль `training.py`
+<hr>
+
+- ##### запускается цикл с количеством шагов, указанном в параметре `Train steps`
+<hr>
+
+- ##### на каждом шаге тренировочного цикла из сгруппированного в батчи тренировочного датасета извлекаются [группы](https://git.nordicwise.com/infra/machine-translate-utils/-/wikis/Создание-тренировочного-датасета#после-фильтрации-применяется-функция-группировки-датасета-batch_sequence_dataset-датасет-группируется-в-бакетыпартии-одинаковой-длины-чтобы-оптимизировать-эффективность-обучения-и-преобразуется-в-следующий-тип). 
+
+   * количество групп будет равно `effective batch size` // `batch size`. Например, если у нас задан параметр `effective batch size = 200 000`, a `batch size = 6 250`, то количество групп будет равно `200 000 // 6 250 = 32`
+   * в каждой из 32 групп будет 6250 токенов, таким образом суммарный объем токенов, который будет обработан за один шаг тренировки будет равен размеру `effective batch size`, т.е. 200 000 токенов.
+
+<hr>
+
+- ##### из группы извлекается батч, и для каждого токена в батче извлекается векторное представление токена из матрицы эмбеддингов с помощью функции [tf.nn.embedding_lookup](https://www.tensorflow.org/api_docs/python/tf/nn/embedding_lookup)
+   ├── [call() | class WordEmbedder(TextInputter)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/inputters/text_inputter.py#L513) модуль `text_inputter.py`
+
+На примере нашей модели с размерность `vocab_size = 26` и `num_units = 4`, схематически, для `source` языка это можно представить следующим образом:
+![lookup](https://github.com/user-attachments/assets/cbc57eb8-92ef-421a-9750-b197c3e3cfa2)
+
+<hr>
+
+Предположим, что наш батч состоит 3 обучающих элементов.\
+**Source:**\
+![source_batch](https://github.com/user-attachments/assets/4f845df0-520c-420d-8580-f9b2b9e9449f)
+
+**Target:**\
+![target_batch](https://github.com/user-attachments/assets/4d5c04c2-d70a-4e32-af33-a34c4b6dfefb)
+
+<hr>
+
+- ##### В ЭНКОДЕРЕ ВЕКТОРНОЕ ПРЕДСТАВЛНЕНИЕ ТОКЕНОВ `source` ЯЗЫКА:
+
+ * умножается на квадратный корень размерности - `inputs` = inputs *  $\sqrt{num  units}$, для примера `num_units = 4`
+![encoder_sqrt](https://github.com/user-attachments/assets/b5e442fd-dee6-47a1-bbae-84abcedcded3)
+
+   * применяется  `dropout` (параметр `dropout` из конфигурационного файла), т.е. случайным образом значения заменяются на ноль, с помощью функции [tf.nn.dropout](https://www.tensorflow.org/api_docs/python/tf/nn/dropout). При этом все остальные значения (кроме замененных на ноль) корректируются умножением на `1/(1 - p)`, где `p` - вероятность дропаута. Это делается для того чтобы привести значения к одному масштабу что позволяет использовать одну и ту же сеть для обучения (при probability < 1.0) и инференса (при probability = 1.0). [Why input is scaled in tf.nn.dropout in tensorflow?](https://stackoverflow.com/questions/34597316/why-input-is-scaled-in-tf-nn-dropout-in-tensorflow)
+![encoder_dropout](https://github.com/user-attachments/assets/ad05fd84-c859-4982-b2bb-36e98f58277b)
+
+   * по размерности батча, с помощью функции [tf.sequence_mask](https://www.tensorflow.org/api_docs/python/tf/sequence_mask) строится тензор маски; для нашего примера размерность батча будет `[3 3 3]` и функция возвращает маску\
+![encoder_mask](https://github.com/user-attachments/assets/92b488bc-9701-4b6b-a807-3bf63e9184fe)
+
+
+   * в цикле, для каждого слоя `layer`, равное количеству параметра `Layers` векторное представление батча (которое хранится в переменной `inputs`) и тензор маски `mask` передается в слой `layer`, результат, возвращаемый `layer` передается в следующий `layer`. Например, если у нас 6 слоев, то результат из первого слоя будет входным результатом для второго слоя и т.д.\
+![encoder_loop](https://github.com/user-attachments/assets/420bde81-1a6d-45ae-bb62-7df80c986469)
+
+   * каждый слой `layer` представляет собой объект класса [SelfAttentionEncoderLayer](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/transformer.py#L205), в котором и реализован механизм внимания с помощью класса [MultiHeadAttention](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/transformer.py#L205). Ниже описан механизм преобразований происходящих в каждом слое `SelfAttentionEncoderLayer`.
+  <hr>
+
+   - ##### слой нормализации, класс LayerNorm()
+   * с параметром `Pre norm = True`, к батчу после операции `dropout` и маскирования, перед расчетом весов attention применяется слой нормализации - для каждой стоки бачта с `k` значениям мы вычисляем среднее значение и дисперсию:\
+  `mean_i = sum(x_i[j] for j in range(k))/k`\
+  `var_i = sum((x_i[j] - mean_i) ** 2 for j in range(k))/k`\
+   затем вычисляется нормализованное значение `x_i_normalized`, включая небольшой коэффициент эпсилон (0.001) для численной стабильности:\
+   `x_i_normalized = (x_i — mean_i) / sqrt(var_i + epsilon)`\
+   и, наконец, `x_i_normalized` линейно преобразуется с помощью gamma и beta, которые являются тренируемыми параметрами (при инициализации `gamma = [1, ..., 1]`, `beta = [0, ..., 0]`):\
+  `output_i = x_i_normalized * gamma + beta`\
+![encoder_layer_norm](https://github.com/user-attachments/assets/c8d5c9b2-2378-46a5-93ba-2f7e1000cd82)
+  <hr>
+
+   * рассчитываются значения матрицы `queries` - нормализованные значения матрицы `inputs`, полученные на предыдущем шаге проходят через линейное преобразование слоя [tf.keras.layers.Dense](https://www.tensorflow.org/api_docs/python/tf/keras/layers/Dense):
+  <hr>
+  
+   - ##### линейное преобразование, класс Dense()
+    ━ 1) рассчитывается размерность батча → `shape = [3, 3, 4]`\
+    ━ 2) изменяется размерность батча [tf.reshape](https://www.tensorflow.org/api_docs/python/tf/reshape)(inputs, [-1, shape[-1]]) → `tf.reshape(inputs, [-1, 4])`\
+![dence_reshape](https://github.com/user-attachments/assets/1b0c3079-d61b-47a5-af32-535eafb41dac)
+    ━ 3) **при mixed_precision и num_units кратное 8**  рассчитывается размер паддинга и его формирование\
+           `padding_size = 8 - num_units % 8`  →  `padding_size = 8 - 4 % 8 = 4`\
+           `paddings = [[0, 0], [0, padding_size]]`  → `paddings = [[0, 0], [0, 4]]`\
+            веса слоя `kernel`(которые были сформированы при инициализации) матрицы `queries` дополняются паддингом [tf.pad(kernel, paddings)](https://www.tensorflow.org/api_docs/python/tf/pad)\
+![dense_3](https://github.com/user-attachments/assets/5636c4f9-11a2-4a14-bf7d-f33fb02b8926)
+    ━ 4) перемножаются матрицы `kernel` и матрица батча (`inputs`) [tf.matmul(inputs, kernel)](https://www.tensorflow.org/api_docs/python/tf/linalg/matmul)\
+![dense_4](https://github.com/user-attachments/assets/75815d5b-e9b6-4ffe-896e-7fe9f0745e2b)
+    ━ 5) из образовавшейся матрицы берется срез по размерности слоя `num_units` и формируется матрица `outputs`\
+![dense_5](https://github.com/user-attachments/assets/a4dcd085-a1f8-45db-a09d-07a17bebc926)
+    ━ 6) к полученной на прошлом шаге матрице `outputs` добавляется вектор смещения `bias` (исходные значения `bias` инициализируются со слоем `kernel` и изначально равны нулю) [tf.nn.bias_add(outputs, bias)](https://www.tensorflow.org/api_docs/python/tf/nn/bias_add)\
+![dense_6](https://github.com/user-attachments/assets/e1e1473c-5ca7-4996-bdaa-9629942e5017)
+    ━ 7) после добавления `bias` матрица `outputs` проходит активацию линейного слоя [activation(outputs)](https://www.tensorflow.org/api_docs/python/tf/keras/layers/Dense). Активация линейного слоя - это применение функции к матрице. Поскольку функция для слоя `tf.keras.layers.Dense` не задается, по дефолту, функция активации равна `a(x) = x`, т.е. матрица остается без изменений\
+![dense_7](https://github.com/user-attachments/assets/49b56436-f50d-471d-98b0-5e5e5f328def)
+    ━ 8) после активации линейного слоя матрица `outputs` переформируется `tf.reshape(outputs, shape[:-1] + [num_units])`  → `tf.reshape(outputs, [3, 3, 4])`. После этого шага мы получаем матрицу `queries`
+![dense_8](https://github.com/user-attachments/assets/17848faf-19c0-487c-8cff-6ca021eb1a1b)
+  <hr>
+
+
+
+
+
+
+
