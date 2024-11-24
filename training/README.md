@@ -284,6 +284,8 @@ outputs = [tf.transpose](https://www.tensorflow.org/api_docs/python/tf/transpose
 ![dense_8](https://github.com/user-attachments/assets/17848faf-19c0-487c-8cff-6ca021eb1a1b)
   <hr>
 
+* полученная на прошлом шаге матрица `queries` делится на количество голов (в нашей архитектуре количество голов равно 2, механизм разделения описан выше [⬆️](https://git.nordicwise.com/infra/machine-translate-utils/-/wikis/Механизм-тренировочного-процесса#рассмотрим-алгоритм-разбиения-матриц-queries-keys-и-values-на-количество-голов))
+![split_heads](https://github.com/user-attachments/assets/f79a505c-461f-4a2a-b7bb-40f831e21056)
 
 
 
