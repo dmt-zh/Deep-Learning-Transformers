@@ -248,7 +248,7 @@ outputs = [tf.transpose](https://www.tensorflow.org/api_docs/python/tf/transpose
    * каждый слой `layer` представляет собой объект класса [SelfAttentionEncoderLayer](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/transformer.py#L205), в котором и реализован механизм внимания с помощью класса [MultiHeadAttention](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/transformer.py#L205). Ниже описан механизм преобразований происходящих в каждом слое `SelfAttentionEncoderLayer`.
   <hr>
 
-   - ##### слой нормализации, класс LayerNorm()
+  - ##### слой нормализации, класс LayerNorm()
    * с параметром `Pre norm = True`, к батчу после операции `dropout` и маскирования, перед расчетом весов attention применяется слой нормализации - для каждой стоки бачта с `k` значениям мы вычисляем среднее значение и дисперсию:\
   `mean_i = sum(x_i[j] for j in range(k))/k`\
   `var_i = sum((x_i[j] - mean_i) ** 2 for j in range(k))/k`\
@@ -262,7 +262,7 @@ outputs = [tf.transpose](https://www.tensorflow.org/api_docs/python/tf/transpose
    * рассчитываются значения матрицы `queries` - нормализованные значения матрицы `inputs`, полученные на предыдущем шаге проходят через линейное преобразование слоя [tf.keras.layers.Dense](https://www.tensorflow.org/api_docs/python/tf/keras/layers/Dense):
   <hr>
   
-   - ##### линейное преобразование, класс Dense()
+  - ##### линейное преобразование, класс Dense()
     ━ 1) рассчитывается размерность батча → `shape = [3, 3, 4]`\
     ━ 2) изменяется размерность батча [tf.reshape](https://www.tensorflow.org/api_docs/python/tf/reshape)(inputs, [-1, shape[-1]]) → `tf.reshape(inputs, [-1, 4])`\
 ![dence_reshape](https://github.com/user-attachments/assets/1b0c3079-d61b-47a5-af32-535eafb41dac)
@@ -315,6 +315,48 @@ outputs = [tf.transpose](https://www.tensorflow.org/api_docs/python/tf/transpose
 ![rp_6](https://github.com/user-attachments/assets/e82d9262-2b4e-4dbc-b38a-e29e0432d12e)\
     ━ 7) таким же образом формируется матрица `relative_repr_values` → `embedding_lookup(relative_position_values, relative_pos)`\
 ![rp_7](https://github.com/user-attachments/assets/3ca1bcfd-74b0-486a-b1dd-b95317942857)
+
+   * следующий шаг - скалярное произведение матриц `queries` и `keys`  → `dot = tf.matmul(queries, keys, transpose_b=True)`\
+![dot_product](https://github.com/user-attachments/assets/4be0fd6a-1343-4dad-885e-5651757c9873)
+
+   * матрица `queries` перемножается с матрицей `relative_repr_keys`  → `matmul_with_relative_representations(queries, relative_repr_keys, transpose_b=True)`\
+![queries_rpk](https://github.com/user-attachments/assets/6b6ff6d0-37f8-4745-a033-6ba75154c1da)
+
+   * к матрице `dot` прибавляется матрица полученная на шаге `matmul_with_relative_representations`\
+![sum_dot_matmul](https://github.com/user-attachments/assets/ff01fa60-268f-4a50-96bf-8c7a3b0a4524)
+
+   * матрица `dot` преобразуется с помощью матрицы `mask`, полученной по батчу токенов:\
+    ━ 1) изменяется размерность матрицы `mask`\
+           `mask` = [tf.expand_dims(mask, 1)](https://www.tensorflow.org/api_docs/python/tf/expand_dims)\
+    ━ 2) матрица `dot` преобразуется следующим образом\
+           `dot = (dot * mask) + (1.0 - mask) * dot.dtype.min`\
+![dot_mask](https://github.com/user-attachments/assets/9391c7af-cc1a-447e-89be-78a826bb4c20)
+
+   * к матрице `dot` применяется функция активация `softmax` и получаем матрицу `attn` → `attn` = [tf.nn.softmax(dot)](https://www.tensorflow.org/api_docs/python/tf/nn/softmax). Функция `softmax`  используется для преобразования вектора значений в вероятностное распределение, которое суммируется до 1\
+![attn](https://github.com/user-attachments/assets/f9148433-704b-4a3d-806d-346976d3b524)
+
+   * к матрице `attn` применяется `dropout` (параметр `attention_dropout` из конфигурационного файла)\
+![attn_drop](https://github.com/user-attachments/assets/914d9c3a-15d7-461f-85fd-fd6d475d8776)
+
+   * после дропаута матрица `drop_attn` перемножается с матрицей `values` - образуется матрица `heads`\
+![heads](https://github.com/user-attachments/assets/aab5a871-8613-45cf-9286-35b2eab589bd)
+
+   * матрица `drop_attn` перемножается с матрицей `relative_repr_values`\
+![matmul_rpv](https://github.com/user-attachments/assets/a9aae29a-887b-46e5-a9e1-e3c511e894e1)
+
+   * к матрице `heads` прибавляется матрица полученная на шаге `matmul_with_relative_representations`\
+![sum_heads_matmul](https://github.com/user-attachments/assets/e19780b8-7ef2-4000-8770-159fc5d6f1eb)
+
+   * матрица `heads` преобразуется в размерность исходного батча через функцию объединения голов [combine_heads](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/transformer.py#L63) - т.е. выполняем обратные операции `split_heads` - получаем матрицу `combined`\
+![combine_heads](https://github.com/user-attachments/assets/7c9ea205-f5bc-4985-b8ac-96f07eae9219)
+
+   * матрица `combined` проходит линейное преобразование, после которого получаем матрицу `outputs` → `outputs = linear_output(combined)`. Линейной преобразование проходит полностью идентично с 1-го по 8-й шаг описанный в классе Dense()[⬆️]()
+
+   * к матрице `outputs` применяется  `dropout` (параметр `dropout` из конфигурационного файла)\
+![outputs_drop](https://github.com/user-attachments/assets/71152b2b-43a9-4fab-b852-e1b3717c9139)
+
+   * применяется механизм `residual connection` - к матрице `outputs` прибавляется матрица `inputs`. Residual connection - это механизм, используемый для решения проблемы исчезающего градиента в глубоких нейронных сетях и улучшения обучения и сходимости модели\
+![residual](https://github.com/user-attachments/assets/f4a086a1-093c-4547-8d42-4f0be886a7be)
 
 
 
