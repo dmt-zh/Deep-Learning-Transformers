@@ -399,7 +399,7 @@ outputs = [tf.transpose](https://www.tensorflow.org/api_docs/python/tf/transpose
 
 <hr>
 
-- ##### В ДЕКОДЕРЕ ВЕКТОРНОЕ ПРЕДСТАВЛНЕНИЕ ТОКЕНОВ `target` ЯЗЫКА:
+##### В ДЕКОДЕРЕ ВЕКТОРНОЕ ПРЕДСТАВЛНЕНИЕ ТОКЕНОВ `target` ЯЗЫКА:
 
    * сформированная матрица `inputs`с помощью функции `tf.nn.embedding_lookup`умножается на квадратный корень `num_units` (в нашем примере num_units=4)  → `inputs` = inputs *  $\sqrt{num  units}$
    ![decoder_1](https://github.com/user-attachments/assets/1a823916-6b3b-4206-83ab-933c153a43c6)
