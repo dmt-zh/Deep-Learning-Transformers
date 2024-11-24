@@ -359,7 +359,45 @@ outputs = [tf.transpose](https://www.tensorflow.org/api_docs/python/tf/transpose
    * применяется механизм `residual connection` - к матрице `outputs` прибавляется матрица `inputs`. Residual connection - это механизм, используемый для решения проблемы исчезающего градиента в глубоких нейронных сетях и улучшения обучения и сходимости модели\
 ![residual](https://github.com/user-attachments/assets/f4a086a1-093c-4547-8d42-4f0be886a7be)
 
+   * матрица `outputs` передается в нейросеть прямого распространения (Feed Forward Network):\
+    ━ 1) применяется слой нормализации LayerNorm()[⬆️](https://github.com/dmt-zh/Transformers-Full-Review/tree/main/training#слой-нормализации-класс-layernorm)\
+    ━ 2) линейное преобразование класс Dense()[⬆️](https://github.com/dmt-zh/Transformers-Full-Review/tree/main/training#линейное-преобразование-класс-dense). Линейное преобразование с функцией активации ReLU [tf.nn.relu](https://www.tensorflow.org/api_docs/python/tf/nn/relu)\
+    ━ 3) применяется  `dropout` (параметр `ffn_dropout` из конфигурационного файла)\
+    ━ 4) линейное преобразование класс Dense()[⬆️](https://github.com/dmt-zh/Transformers-Full-Review/tree/main/training#линейное-преобразование-класс-dense)\
+    ━ 5) применяется  `dropout` (параметр `dropout` из конфигурационного файла)\
+    ━ 6) применяется механизм `residual connection`\
+![ffn](https://github.com/user-attachments/assets/7550aa01-1462-458a-8e4e-583d055bd023)
 
+   * если значение `Layers` больше одного, то после преобразования матрицы `outputs` с помощью Feed Forward Network, полученная матрица отправляется на вход следующему слою, пока не пройдет через все слои
+
+   * полученная матрица `outputs` **из последнего слоя**, проходит слой нормализации LayerNorm()[⬆️](https://github.com/dmt-zh/Transformers-Full-Review/tree/main/training#слой-нормализации-класс-layernorm) - завершающая операция в энкодере. Полученная на этом шаге матрица передается в декодер\
+![ffn_layer_norm](https://github.com/user-attachments/assets/3e1a5f57-918d-4746-b006-cff4f99cb17e)
+
+  <hr>
+
+   * вышеописанный механизм преобразования батча токенов `source` языка в энкодере можно отобразить следующим образом
+![encoder](https://github.com/user-attachments/assets/9d134443-f7dc-4a0c-b500-104beae29d35)
+
+  <hr>
+
+   **Энкодер. Упрощенная последовательность вызова:**\
+   ├── [def __call__() | class Model(tf.keras.layers.Layer)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/models/model.py#L92C5-L92C17) модуль `model.py`\
+   ├── [def call() | class SequenceToSequence(model.SequenceGenerator)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/models/sequence_to_sequence.py#L165) модуль `sequence_to_sequence.py`\
+   ├── [def call() | class WordEmbedder(TextInputter)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/inputters/text_inputter.py#L505) модуль `text_inputter.py`\
+   ├── [def call() | class SelfAttentionEncoder(Encoder)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/encoders/self_attention_encoder.py#L78C5-L78C13) модуль `self_attention_encoder.py`\
+   ├── [def build_mask() | class Encoder(tf.keras.layers.Layer)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/encoders/encoder.py#L14) модуль `encoder.py`\
+   ├── [def call() | class LayerWrapper(tf.keras.layers.Layer)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/common.py#L133) модуль `layers
+/common.py`\
+   ├── [def call() | class SelfAttentionEncoderLayer(tf.keras.layers.Layer)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/transformer.py#L488C5-L488C13) модуль `layers/transformer.py`\
+   ├── [def call() | class MultiHeadAttention(tf.keras.layers.Layer)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/transformer.py#L284) модуль `layers/transformer.py`\
+   ├── [def call() | class Dense(tf.keras.layers.Dense)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/common.py#L59) модуль `layers
+/common.py`\
+   ├── [def call() | class LayerWrapper(tf.keras.layers.Layer)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/common.py#L133) модуль `layers
+/common.py`\
+   ├── [def call() | class FeedForwardNetwork(tf.keras.layers.Layer)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/transformer.py#L146) модуль `layers/transformer.py`\
+   ├── [def call() | class LayerNorm(tf.keras.layers.LayerNormalization)](https://github.com/OpenNMT/OpenNMT-tf/blob/6f3b952ebb973dec31250a806bf0f56ff730d0b5/opennmt/layers/common.py#L91) модуль `layers/common.py`
+
+<hr>
 
 
 
