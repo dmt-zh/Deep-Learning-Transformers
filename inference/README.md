@@ -71,3 +71,91 @@
 
    * формируется матрица `total_probs` путем сложения матрицы `log_probs` и перевернутой матрицы `cum_log_probs` → log_probs + tf.expand_dims(cum_log_probs, 1)\
 ![log_probs](https://github.com/user-attachments/assets/56dce430-099c-4b4e-8855-df02484aeef1)
+
+   * по матрицам `total_probs`, `sequence_lengths`, `finished` и `accumulated_attention` рассчитываются оценки **scores**:
+        - по матрице `total_probs` инициализируется исходная матрица `scores` → `scores = total_probs`\
+        ![scores](https://github.com/user-attachments/assets/d649efd3-a8bc-44ac-97f8-39141768d9db)
+        - если `length_penalty != 0`, тогда, выполняем следующие действия:
+           - формируется матрица `expand_sequence_lengths` - матрица `sequence_lengths` изменяется по размерности tf.expand_dims(sequence_lengths, 1) → `[[0], [0]]`
+           - к матрице `expand_sequence_lengths` прибавляется единица и матрица приводится к типу значений `log_probs` - tf.cast(expand_sequence_lengths + 1, log_probs.dtype) → `[[0], [0]] + 1 = [[1], [1]]`
+            - формируется матрица `sized_expand_sequence_lengths` - к полученной выше матрице прибавляется константа 5 и делится на константу 6: (5.0 + expand_sequence_lengths) / 6.0) → `(5 + [[1], [1]]) / 6 = [[1], [1]]`
+           - формируется матрица `penalized_sequence_lengths` - матрица `sized_expand_sequence_lengths` возводится в степень, указанную в параметре `length_penalty`: tf.pow(sized_expand_sequence_lengths, length_penalty) → `[[1]**0.2, [1]**0.2] = [[1], [1]]`
+           - значения матрицы корректируются целочисленным делением на матрицу `penalized_sequence_lengths` → `scores /= penalized_sequence_lengths`
+       ![penalized_sequence_lengths](https://github.com/user-attachments/assets/81e2ee87-9573-4089-905c-1f25eb5f71ee)
+
+        - если `coverage_penalty!= 0`, тогда, выполняем следующие действия:
+           - по матрице `accumulated_attention` формируется матрица `equal` с помощью функции [tf.equal(accumulated_attention, 0.0)](https://www.tensorflow.org/api_docs/python/tf/math/equal)  tf.expand_dims(sequence_lengths, 1), т.е. проверяем элементы матрицы на равенство нулю\
+        ![acc_attn2](https://github.com/user-attachments/assets/98b35ba1-e2c3-42b9-9192-889b357f561a)
+           - по матрице `accumulated_attention` формируется матрица единиц `ones_like` с помощью функции [tf.ones_like(accumulated_attention)](https://www.tensorflow.org/api_docs/python/tf/ones_like)\
+        ![acc_attn3](https://github.com/user-attachments/assets/21c3a862-e254-40d7-aab6-1d17bc68efe3)
+           - с помощью функции [tf.where(equal, x=ones_like, y=accumulated_attention)](https://www.tensorflow.org/api_docs/python/tf/where) переопределяется матрица `accumulated_attention`, в которой значения будут браться из `x`, если элемент из `equal` равен единице, иначе из `y`. Поскольку все элементы матрицы `equal` равны нулю, то все значения будут взяты из `y`\
+        ![acc_attn4](https://github.com/user-attachments/assets/05b91319-e915-4e9a-9260-2149f8f38b10)
+           - формируется матрица `coverage_penalty` - по матрице `accumulated_attention` и единице берется минимальное значение и рассчитывается логарифм, а затем элементы суммируются `tf.reduce_sum(tf.math.log(tf.minimum(accumulated_attention, 1.0)), axis=1)`
+        ![cov_penalty](https://github.com/user-attachments/assets/2e21ce08-74e8-41ab-9688-1a314d6196d5)
+           - полученная на прошлом шаге матрица `coverage_penalty` перемножается с матрицей `finished` `coverage_penalty *= finished`\
+        ![cov_penalty2](https://github.com/user-attachments/assets/5aa72733-2d9d-4bd2-9d26-46d2693f9356)
+           - матрица `scores ` корректируется на заданное значение `coverage_penalty` из параметров и рассчитанную матрицу `coverage_penalty` - `scores += self.coverage_penalty * tf.expand_dims(coverage_penalty, 1)`
+        ![scores_cov_penalty](https://github.com/user-attachments/assets/7002d5f5-a890-4662-af88-d45961aeb560)
+
+   * матрица `scores` изменяется по размерности `tf.reshape(scores, [-1, beam_size * vocab_size])`\
+   ![scores_flat](https://github.com/user-attachments/assets/7c974c90-e3d9-4e8d-89f0-74b36190fdd2)
+
+   * матрица `total_probs` изменяется по размерности `tf.reshape(scores, [-1, beam_size * vocab_size])`\
+   ![total_probs](https://github.com/user-attachments/assets/75c86961-0884-4fa4-9b3f-797be4e6bc72)
+
+
+   * рассчитываются `id` target токенов `sample_ids` и оценки для этих токенов `sample_scores`:
+        - по матрице `scores` с помощью функции [tf.nn.top_k](https://www.tensorflow.org/api_docs/python/tf/math/top_k) находятся максимальные значения и их индексы `top_scores, top_ids = tf.nn.top_k(scores, k=sampling_topk)` (если параметр `sampling_topk` не задан, то `k` будет равно `beam_size`)\
+        ![top_scores](https://github.com/user-attachments/assets/fb838e6f-397f-4280-92b7-babc6d845cb3)
+        - матрица `top_scores` делится на значение параметра `sampling_temperature`\
+        ![temperature](https://github.com/user-attachments/assets/b259e7a8-dce6-43e9-8b5f-70a6a008cd7e)
+        - из скорректированной матрицы `top_scores` с помощью функции [tf.random.categorical](https://www.tensorflow.org/api_docs/python/tf/random/categorical) извлекаются индексы элементов в количестве `beam_size`\
+        ![sample_ids](https://github.com/user-attachments/assets/24d0072d-0afe-4030-9cd7-2af0dc876f39)
+        - по индексам элементов, с помощью функции [tf.gather](https://www.tensorflow.org/api_docs/python/tf/gather) из матрицы `top_ids` извлекаются индексы токенов
+        ![top_ids](https://github.com/user-attachments/assets/30cfb90c-40a5-4c2f-b2a9-d37db647f3db)
+        - по индексам элементов, с помощью функции [tf.gather](https://www.tensorflow.org/api_docs/python/tf/gather) из матрицы `scores` извлекаются оценки для этих токенов
+        ![sample_scores](https://github.com/user-attachments/assets/593db4a6-5c58-42b2-8dda-d64f97409bb0)
+
+   * по полученным значениям `sample_ids` из матрицы `total_probs` формируется матрица `cum_log_probs`
+   ![cum_log_probs](https://github.com/user-attachments/assets/1cf1350c-7557-4f62-892f-2cc90d9b0df6)
+
+   * по полученным значениям `sample_ids`, путем деления с остатком на значение `vocab_size` формируется матрица `word_ids` → word_ids = sample_ids % vocab_size = [9 12] % 26 = `[9 12]`
+
+   * по полученным значениям `sample_ids`, путем целочисленного деления на значение `vocab_size` формируется матрица `beam_ids` → beam_ids = sample_ids // vocab_size = [9 12] // 26 = `[0 0]`
+
+   * по полученным матрицам `word_ids` и `beam_ids`, а так же значению `beam_size` формируется матрица `beam_indices` → beam_indices = (tf.range(tf.shape(word_ids)[0]) // beam_size) * beam_size + beam_ids = ([0 1] // 2) * 2 + [0 0] = `[0 0]`
+
+   * переопределяется матрица `sequence_lengths` → sequence_lengths = tf.where(finished, x=sequence_lengths, y=sequence_lengths + 1)\
+   ![seq_length](https://github.com/user-attachments/assets/84ccdff8-78cc-4928-93de-2d11fa64f72d)
+
+   * переопределяется матрица `finished` → finished = tf.gather(finished, beam_indices) → tf.gather([0 0], [0 0]) = `[0 0]`
+
+   * переопределяется матрица `sequence_lengths` → finished = tf.gather(sequence_lengths, beam_indices) → tf.gather([1 1], [0 0]) = `[1 1]`
+
+   * в словарь `extra_vars` по ключу `sequence_lengths` сохраняется матрица `sequence_lengths` → 
+ extra_vars = {"sequence_lengths": sequence_lengths}
+
+   * в словарь `extra_vars` по ключу `parent_ids` записываются значения `beam_ids` и значения текущего шага → extra_vars = {"parent_ids": parent_ids.write(step, beam_ids)}
+
+   * в словарь `extra_vars` по ключу `accumulated_attention` сохраняется матрица `accumulated_attention` → 
+ tf.gather(accumulated_attention, beam_indices)\
+   ![extra_vars_acc_attn](https://github.com/user-attachments/assets/30c02486-d743-4a69-ba5a-e5cd7e60dac6)
+
+   * полученные значения `word_ids` проверяются на равенство токену окончания последовательности `</s>` и матрица `finished` переопределяется → `finished = tf.logical_or(finished, tf.equal(word_ids, end_id))`
+
+   * ##### на этом step 0 завершается, матрицы `word_ids`, `cum_log_probs`, `finished`, и словарь `extra_vars` передаются в начало цикла и весь описанных выше процесс
+   ![step0_finish](https://github.com/user-attachments/assets/f6af2443-3bd2-4acc-800f-edeae168a096)
+
+<hr>
+
+
+
+
+
+
+
+
+
+
+
+
