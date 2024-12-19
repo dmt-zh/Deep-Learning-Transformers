@@ -487,7 +487,8 @@ outputs = [tf.transpose](https://www.tensorflow.org/api_docs/python/tf/transpose
 ![decoder_ffn_ln](https://github.com/user-attachments/assets/ae758d4e-cbc8-4b8a-842d-048a0bfb0535)
 
   <hr>
-   * массив матриц `attention` из каждого слоя преобразуется с помощью заданной стратегии обработки. По дефолту определена стратегия `FIRST_HEAD_LAST_LAYER`, т.е. будет взята матрица `attention` полученная на последнем слое, и у этой матрице будет взята первая голова\
+   * массив матриц `attention` из каждого слоя преобразуется с помощью заданной стратегии обработки. По дефолту определена стратегия `FIRST_HEAD_LAST_LAYER`, т.е. будет взята матрица `attention` полученная на последнем слое, и у этой матрице будет взята первая голова
+  
 ![mha_reduction](https://github.com/user-attachments/assets/2da1c812-acee-4eab-b121-09dc28f98753)
 
   <hr>
